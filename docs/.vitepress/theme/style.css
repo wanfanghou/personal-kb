@@ -62,7 +62,6 @@ html.dark {
   background: linear-gradient(180deg, #faf9f7 0%, #f5f0eb 100%);
 }
 .VPHero .container { position: relative; z-index: 1; }
-.VPHero .clip,
 .VPHero .image-bg,
 .VPHero .image-container { display: none !important; }
 
