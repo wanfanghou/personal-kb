@@ -6,6 +6,7 @@ export default defineConfig({
   lang: 'zh-CN',
   cleanUrls: true,
   lastUpdated: true,
+  appearance: false,
 
   themeConfig: {
     nav: [
