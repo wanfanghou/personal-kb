@@ -26,6 +26,25 @@
   --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
+/* 暗色模式下也使用温暖配色（覆盖 VitePress 默认暗色） */
+html.dark {
+  --vp-c-brand-1: #c9a87c;
+  --vp-c-brand-2: #b08968;
+  --vp-c-brand-3: #d4b896;
+  --vp-c-brand-soft: rgba(176, 137, 104, 0.12);
+
+  --vp-c-text-1: #e8e0d5;
+  --vp-c-text-2: #c4b8a7;
+  --vp-c-text-3: #9c8e7c;
+
+  --vp-c-bg: #1c1917;
+  --vp-c-bg-soft: #252220;
+  --vp-c-bg-alt: #2d2a27;
+
+  --vp-c-border: #3d3832;
+  --vp-c-divider: #332f2a;
+}
+
 /* ========== NAV ========== */
 .VPNav {
   backdrop-filter: saturate(180%) blur(16px) !important;
@@ -288,6 +307,114 @@
 /* ========== FOOTER ========== */
 .VPFooter {
   border-top: 1px solid var(--vp-c-divider) !important;
+}
+
+/* ========== DARK MODE OVERRIDES ========== */
+html.dark .VPNav {
+  background: rgba(28, 25, 23, 0.78) !important;
+  border-bottom: 1px solid var(--vp-c-border) !important;
+}
+
+html.dark .VPHero {
+  background: linear-gradient(180deg, #1c1917 0%, #252220 100%);
+}
+
+html.dark .VPHero .name {
+  color: #e8e0d5 !important;
+  -webkit-text-fill-color: #e8e0d5 !important;
+}
+
+html.dark .VPHero .text {
+  color: #c4b8a7 !important;
+}
+
+html.dark .VPHero .tagline {
+  color: #9c8e7c !important;
+}
+
+html.dark .VPButton.brand {
+  background: #e8e0d5 !important;
+  color: #1c1917 !important;
+}
+
+html.dark .VPButton.brand:hover {
+  background: #f5f0eb !important;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.3) !important;
+}
+
+html.dark .VPButton.alt {
+  background: #2d2a27 !important;
+  border-color: var(--vp-c-border) !important;
+  color: #c4b8a7 !important;
+}
+
+html.dark .VPButton.alt:hover {
+  border-color: #c9a87c !important;
+  color: #c9a87c !important;
+}
+
+html.dark .VPFeature {
+  background: #252220 !important;
+  border-color: var(--vp-c-border) !important;
+}
+
+html.dark .VPFeature:hover {
+  border-color: #c9a87c !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.2), 0 2px 8px rgba(201,168,124,0.12) !important;
+}
+
+html.dark .VPFeature .title {
+  color: #e8e0d5 !important;
+}
+
+html.dark .VPFeature .details {
+  color: #c4b8a7 !important;
+}
+
+html.dark .vp-doc h1 { color: #e8e0d5; }
+html.dark .vp-doc h2 { color: #d4c8b8; border-bottom-color: var(--vp-c-divider); }
+html.dark .vp-doc h3 { color: #c4b8a7; }
+html.dark .vp-doc p { color: #c4b8a7; }
+
+html.dark .vp-doc thead th {
+  background: #e8e0d5 !important;
+  color: #1c1917 !important;
+}
+
+html.dark .vp-doc td {
+  color: #c4b8a7;
+  border-top-color: var(--vp-c-divider) !important;
+}
+
+html.dark .vp-doc tbody tr:nth-child(even) td {
+  background: #252220;
+}
+
+html.dark .vp-doc a { color: #c9a87c; }
+html.dark .vp-doc a:hover { color: #d4b896; }
+
+html.dark .vp-doc blockquote {
+  background: #252220;
+  color: #c4b8a7;
+  border-left-color: #c9a87c;
+}
+
+html.dark .VPSidebarItem .link:hover { color: #c9a87c !important; }
+html.dark .is-active > .link { color: #c9a87c !important; }
+
+html.dark .tag-chip {
+  background: #2d2a27;
+  color: #c9a87c;
+}
+
+html.dark .tag-chip:hover {
+  background: #c9a87c;
+  color: #1c1917;
+}
+
+html.dark .DocSearch-Button {
+  background: #2d2a27 !important;
+  border-color: var(--vp-c-border) !important;
 }
 
 /* ========== SMOOTH SCROLL ========== */
