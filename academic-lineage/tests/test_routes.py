@@ -265,6 +265,37 @@ def test_mentorships_list_endpoint_supports_filters(app):
     assert body["mentorships"][0]["student_name"] == "S"
 
 
+def test_delete_person_endpoint_cascades(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={"name": "M", "homepage_url": "https://example.edu/m"}).get_json()
+    student = client.post("/api/persons", json={"name": "S", "homepage_url": "https://example.edu/s"}).get_json()
+    client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": student["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s",
+    })
+    response = client.delete(f"/api/persons/{mentor['person']['id']}")
+    assert response.status_code == 200
+    assert response.get_json()["relationships_removed"] == 1
+    assert client.get(f"/api/persons/{mentor['person']['id']}").status_code == 404
+    assert client.get("/api/mentorships").get_json()["mentorships"] == []
+    assert client.delete(f"/api/persons/{mentor['person']['id']}").status_code == 404
+
+
+def test_delete_mentorship_endpoint(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={"name": "M", "homepage_url": "https://example.edu/m"}).get_json()
+    student = client.post("/api/persons", json={"name": "S", "homepage_url": "https://example.edu/s"}).get_json()
+    created = client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": student["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s",
+    }).get_json()["mentorship"]
+    response = client.delete(f"/api/mentorships/{created['id']}")
+    assert response.status_code == 200
+    assert response.get_json() == {"deleted": True}
+    assert client.get("/api/mentorships").get_json()["mentorships"] == []
+    assert client.delete(f"/api/mentorships/{created['id']}").status_code == 404
+
+
 def test_create_person_stores_title_editorial_and_honors(app):
     client = app.test_client()
     response = client.post("/api/persons", json={

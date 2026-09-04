@@ -2,11 +2,14 @@ import pytest
 
 from app.repositories import (
     create_mentorship,
+    delete_mentorship,
+    delete_person,
     find_or_create_person,
     find_persons,
     get_filter_options,
     get_lineage,
     get_network,
+    get_person,
     list_mentorships,
     normalize_homepage_url,
     update_mentorship,
@@ -260,3 +263,31 @@ def test_list_mentorships_supports_status_filter(app):
     assert verified[0]["student_name"] == "S"
     assert len(drafts) == 1
     assert len(by_name) == 2
+
+
+def test_delete_person_cascades_relationships(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})
+        student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s"})
+        other, _ = find_or_create_person({"name": "O", "homepage_url": "https://example.edu/o"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "phd",
+                           "evidence_url": "https://example.edu/s"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": other["id"], "relationship_type": "master",
+                           "evidence_url": "https://example.edu/o"})
+        result = delete_person(mentor["id"])
+        assert result["deleted"] is True
+        assert result["relationships_removed"] == 2
+        assert get_person(mentor["id"]) is None
+        assert list_mentorships() == []
+        assert delete_person(mentor["id"])["deleted"] is False
+
+
+def test_delete_mentorship(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})
+        student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s"})
+        created = create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "phd",
+                                     "evidence_url": "https://example.edu/s"})
+        assert delete_mentorship(created["id"]) is True
+        assert list_mentorships() == []
+        assert delete_mentorship(created["id"]) is False

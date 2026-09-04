@@ -579,6 +579,30 @@ def get_network(filters: dict | None = None) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
+def delete_mentorship(mentorship_id: str) -> bool:
+    db = get_db()
+    cursor = db.execute("DELETE FROM mentorships WHERE id = ?", (mentorship_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+
+def delete_person(person_id: str) -> dict:
+    """Delete a person together with their mentorships and snapshots."""
+    db = get_db()
+    exists = db.execute("SELECT 1 FROM persons WHERE id = ?", (person_id,)).fetchone()
+    if exists is None:
+        return {"deleted": False, "relationships_removed": 0}
+    cursor = db.execute(
+        "DELETE FROM mentorships WHERE mentor_id = ? OR student_id = ?",
+        (person_id, person_id),
+    )
+    relationships_removed = cursor.rowcount
+    db.execute("DELETE FROM source_snapshots WHERE person_id = ?", (person_id,))
+    db.execute("DELETE FROM persons WHERE id = ?", (person_id,))
+    db.commit()
+    return {"deleted": True, "relationships_removed": relationships_removed}
+
+
 def record_snapshot(person_id: str, snapshot: dict) -> dict:
     """Record minimal identifying info from a user-submitted URL fetch."""
     db = get_db()

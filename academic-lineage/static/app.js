@@ -44,6 +44,8 @@ const DETAIL_CONTAINERS = {
 };
 
 const GRAPH_DETAIL_HINT = '点击节点或边查看详情。<br>在筛选栏调整条件，图谱会实时更新。<br>点击节点后可用「以该学者为中心」查看上下游谱系。';
+const SCHOLAR_DETAIL_HINT = '点击左侧学者查看详情，可编辑职称、机构、编委会任职、荣誉等。';
+const RELATIONSHIP_DETAIL_HINT = '点击左侧关系查看详情，可编辑状态、年份、毕业去向、证据等。';
 
 const $ = (id) => document.getElementById(id);
 
@@ -330,8 +332,52 @@ function expandDown() {
 }
 
 function refreshGraphAfterChange() {
-  if (state.graphMode === 'overview') loadNetwork();
-  else if (state.centerId) loadLineage(state.centerId, state.up, state.down);
+  if (state.graphMode === 'overview' || !state.centerId) loadNetwork();
+  else loadLineage(state.centerId, state.up, state.down);
+}
+
+/* ================= 删除 ================= */
+
+async function deletePerson() {
+  const person = detail.person;
+  if (!window.confirm(`确定删除学者「${person.name}」？\n与其相关的所有导师—学生关系将一并删除，此操作不可恢复。`)) return;
+  try {
+    const result = await api(`/api/persons/${encodeURIComponent(person.id)}`, { method: 'DELETE' });
+    state.graphMode = 'overview';
+    if (state.centerId === person.id) state.centerId = null;
+    if (state.selectedId === person.id) state.selectedId = null;
+    detail.person = null;
+    editingMode = null;
+    setDetail('graph', '详情', GRAPH_DETAIL_HINT);
+    setDetail('scholar', '学者详情', SCHOLAR_DETAIL_HINT);
+    refreshGraphAfterChange();
+    refreshScholarList();
+    refreshRelationshipList();
+    refreshFilterOptions();
+    refreshStats();
+    // eslint-disable-next-line no-console
+    console.log(`已删除学者，连带删除 ${result.relationships_removed} 条关系`);
+  } catch (error) {
+    setDetail(detail.personContainer, '删除失败', `<p class="status error">${escapeHtml(error.message)}</p>`);
+  }
+}
+
+async function deleteRelationship() {
+  const m = detail.mentorship;
+  const label = `${m.student_name || '学生'} ← ${m.mentor_name || '导师'}（${REL_TYPE_ZH[m.relationship_type] || m.relationship_type}）`;
+  if (!window.confirm(`确定删除关系「${label}」？此操作不可恢复。`)) return;
+  try {
+    await api(`/api/mentorships/${encodeURIComponent(m.id)}`, { method: 'DELETE' });
+    detail.mentorship = null;
+    editingMode = null;
+    setDetail('graph', '详情', GRAPH_DETAIL_HINT);
+    setDetail('relationship', '关系详情', RELATIONSHIP_DETAIL_HINT);
+    refreshGraphAfterChange();
+    refreshRelationshipList();
+    refreshStats();
+  } catch (error) {
+    setDetail(detail.mentorshipContainer, '删除失败', `<p class="status error">${escapeHtml(error.message)}</p>`);
+  }
 }
 
 /* ================= 学者详情与编辑 ================= */
@@ -343,6 +389,7 @@ function renderPersonDetails(person, container) {
     <div class="detail-actions">
       <button class="btn btn-primary btn-small" data-action="center-person">以该学者为中心</button>
       <button class="btn btn-small" data-action="edit-person">编辑学者信息</button>
+      <button class="btn btn-danger btn-small" data-action="delete-person">删除学者</button>
       ${container === 'graph'
         ? `<button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
            <button class="btn btn-small" data-action="expand-down">↓ 向下展开一代</button>
@@ -458,6 +505,7 @@ function renderMentorshipDetails(m, container) {
     </dl>
     <div class="detail-actions">
       <button class="btn btn-primary btn-small" data-action="edit-relationship">编辑关系</button>
+      <button class="btn btn-danger btn-small" data-action="delete-relationship">删除关系</button>
     </div>
   `);
 }
@@ -926,6 +974,8 @@ function bindDetailActions() {
     if (action === 'save-person') savePersonEdit();
     if (action === 'edit-relationship' && detail.mentorship) renderRelationshipEditForm(detail.mentorship);
     if (action === 'save-relationship') saveRelationshipEdit();
+    if (action === 'delete-person' && detail.person) deletePerson();
+    if (action === 'delete-relationship' && detail.mentorship) deleteRelationship();
     if (action === 'cancel-edit') {
       editingMode = null;
       if (detail.mentorship) renderMentorshipDetails(detail.mentorship, detail.mentorshipContainer);

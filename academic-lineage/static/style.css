@@ -139,6 +139,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .btn-primary:hover { background: var(--accent-dark); }
+.btn-danger { background: #fff; border-color: rgba(192, 57, 43, 0.35); color: var(--danger); }
+.btn-danger:hover { background: #fae9e7; border-color: var(--danger); box-shadow: var(--shadow-soft); }
 .btn-small { padding: 5px 11px; font-size: 12px; }
 
 .muted { color: var(--muted); font-size: 12px; }

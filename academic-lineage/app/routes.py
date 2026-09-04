@@ -98,6 +98,14 @@ def update_person(person_id):
     return jsonify({"person": person})
 
 
+@bp.delete("/persons/<person_id>")
+def delete_person(person_id):
+    result = repositories.delete_person(person_id)
+    if not result["deleted"]:
+        return jsonify({"error": "person not found"}), 404
+    return jsonify(result)
+
+
 @bp.get("/persons/<person_id>/lineage")
 def get_lineage(person_id):
     try:
@@ -153,6 +161,14 @@ def update_mentorship(mentorship_id):
     except services.ValidationError as error:
         return jsonify({"error": str(error)}), 400
     return jsonify({"mentorship": mentorship})
+
+
+@bp.delete("/mentorships/<mentorship_id>")
+def delete_mentorship(mentorship_id):
+    deleted = repositories.delete_mentorship(mentorship_id)
+    if not deleted:
+        return jsonify({"error": "mentorship not found"}), 404
+    return jsonify({"deleted": True})
 
 
 @bp.post("/export/public")
