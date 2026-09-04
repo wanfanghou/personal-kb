@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>学术谱系 · 本地管理</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <h1>学术谱系 · 本地管理</h1>
+    <div class="topbar-actions">
+      <button id="export-btn" class="btn btn-secondary" type="button">导出公开数据</button>
+      <span id="export-status" class="muted"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="sidebar">
+      <div class="card">
+        <h2>搜索学者</h2>
+        <input id="search-input" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
+        <ul id="search-results" class="result-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>录入导师—学生关系</h2>
+        <p class="muted hint">输入两位学者的主页 URL，预览身份后确认方向。关系方向不会自动推断。</p>
+
+        <label for="mentor-url">导师主页 URL</label>
+        <div class="input-group">
+          <input id="mentor-url" type="url" placeholder="https://…" autocomplete="off">
+          <button id="preview-mentor" class="btn" type="button">预览</button>
+        </div>
+        <div id="mentor-card" class="identity-card" hidden></div>
+
+        <label for="student-url">学生主页 URL</label>
+        <div class="input-group">
+          <input id="student-url" type="url" placeholder="https://…" autocomplete="off">
+          <button id="preview-student" class="btn" type="button">预览</button>
+        </div>
+        <div id="student-card" class="identity-card" hidden></div>
+
+        <div class="form-grid">
+          <label>关系类型
+            <select id="relationship-type">
+              <option value="phd" selected>博士导师</option>
+              <option value="master">硕士导师</option>
+              <option value="postdoc">博士后合作导师</option>
+              <option value="informal">非正式指导</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label>状态
+            <select id="rel-status">
+              <option value="verified" selected>已确认</option>
+              <option value="draft">草稿</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+          </label>
+          <label>可信度
+            <select id="confidence">
+              <option value="confirmed" selected>confirmed 已确认</option>
+              <option value="probable">probable 很可能</option>
+              <option value="uncertain">uncertain 不确定</option>
+            </select>
+          </label>
+          <label>开始年份 <input id="start-year" type="number" min="1900" max="2100" placeholder="如 2020"></label>
+          <label>结束年份 <input id="end-year" type="number" min="1900" max="2100" placeholder="如 2025"></label>
+          <label>机构 <input id="rel-institution" type="text" placeholder="就读/指导所在机构"></label>
+          <label>证据 URL <input id="evidence-url" type="url" placeholder="默认使用学生主页 URL"></label>
+          <label>证据说明 <input id="evidence-text" type="text" placeholder="如：主页列出 PhD advisor"></label>
+          <label>私有备注 <input id="notes-private" type="text" placeholder="仅保存在本地，不导出"></label>
+          <label class="checkbox-row"><input id="public-flag" type="checkbox"> 公开（允许导出到公开站点）</label>
+        </div>
+
+        <p id="confirmation-sentence" class="sentence" hidden>
+          学生 <strong id="sentence-student"></strong> 是导师 <strong id="sentence-mentor"></strong> 的学生
+        </p>
+        <button id="confirm-btn" class="btn btn-primary" type="button" disabled>确认并加入图谱</button>
+        <p id="entry-status" class="status"></p>
+      </div>
+    </section>
+
+    <section class="graph-panel">
+      <div class="graph-toolbar">
+        <button id="expand-up" class="btn btn-small" type="button">↑ 向上展开一代</button>
+        <button id="expand-down" class="btn btn-small" type="button">↓ 向下展开一代</button>
+        <button id="reset-view" class="btn btn-small" type="button">重置视图</button>
+        <span id="graph-info" class="muted"></span>
+      </div>
+      <div id="cy"></div>
+    </section>
+
+    <aside class="detail-panel card">
+      <h2 id="detail-title">详情</h2>
+      <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>说明：红色为导师方向节点，蓝色为学生方向节点，黄色为当前中心学者；箭头由导师指向学生。</div>
+    </aside>
+  </main>
+
+  <script src="{{ url_for('static', filename='vendor/cytoscape.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

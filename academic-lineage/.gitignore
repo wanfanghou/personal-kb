@@ -1,0 +1,12 @@
+# Local environment
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local database (never commit)
+/data/
+
+# OS files
+.DS_Store
+Thumbs.db
