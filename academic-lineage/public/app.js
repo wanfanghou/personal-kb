@@ -11,6 +11,9 @@ const state = {
   up: 3,
   down: 2,
   selectedId: null,
+  lineageType: 'phd', // 'phd' | ''（博士谱系 / 全部类型）
+  lastUpGens: 0,
+  lastUpLeaf: null, // 上溯到头的学者 id（用于「尚未收录」提示）
 };
 
 const REL_TYPE_ZH = {
@@ -20,11 +23,9 @@ const REL_TYPE_ZH = {
   informal: '非正式指导',
   other: '其他',
 };
+const REL_TYPE_SHORT = { phd: '博士', master: '硕士', postdoc: '博后', informal: '非正式', other: '其他' };
 
 const PAGE_TITLES = { graph: '学术谱系总览', scholars: '学者库', contribute: '投稿关系' };
-
-const GRAPH_DETAIL_HINT = '点击节点或边查看详情。<br>在筛选栏调整条件，图谱会实时更新。<br>点击节点后可用「以该学者为中心」查看上下游谱系。';
-const SCHOLAR_DETAIL_HINT = '点击左侧学者查看详情。';
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,6 +49,10 @@ function showErrorBanner(message) {
   document.body.prepend(banner);
 }
 
+function typeOk(rel) {
+  return !state.lineageType || rel.relationship_type === state.lineageType;
+}
+
 /* ================= 页面切换 ================= */
 
 function switchPage(page) {
@@ -63,6 +68,7 @@ function switchPage(page) {
     else if (state.centerId) loadLineage(state.centerId, state.up, state.down);
   }
   if (page === 'scholars') refreshScholarList();
+  if (page === 'contribute') populateStudentSelect();
 }
 
 /* ================= 数据加载 ================= */
@@ -89,8 +95,10 @@ async function loadData() {
         `${manifest.people_count} 位学者 / ${manifest.relationship_count} 条关系`;
     }
     populateFilterOptions();
+    populateStudentSelect();
     loadNetwork();
     refreshScholarList();
+    handleHashRoute();
   } catch (error) {
     showErrorBanner(error.message);
   }
@@ -132,7 +140,81 @@ function populateFilterOptions() {
   fillSelect('s-title', titles, '全部职称');
 }
 
-/* ================= 图谱页 ================= */
+/* ================= 首页搜索 ================= */
+
+let heroTimer = null;
+
+function heroResultsFor(q) {
+  const needle = q.toLowerCase();
+  return state.people.filter((person) => {
+    const haystack = [
+      person.name,
+      person.name_en,
+      person.institution,
+      person.field,
+      ...(person.aliases || []),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return haystack.includes(needle);
+  }).slice(0, 20);
+}
+
+function gradYears(person) {
+  const years = state.relationships
+    .filter((r) => r.student_id === person.id && r.end_year)
+    .map((r) => r.end_year);
+  return years.length ? `毕业 ${Math.min(...years)}` : '';
+}
+
+function renderHeroResults() {
+  const q = $('hero-input').value.trim();
+  const list = $('hero-results');
+  if (!q) { list.hidden = true; list.innerHTML = ''; return; }
+  const results = heroResultsFor(q);
+  list.innerHTML = '';
+  if (!results.length) {
+    list.hidden = false;
+    list.innerHTML = '<li class="muted" style="padding:10px">没有匹配的学者。可以在「投稿关系」里补充。</li>';
+    return;
+  }
+  for (const person of results) {
+    const item = document.createElement('li');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="li-main">
+        <div class="li-title">${escapeHtml(person.name)}</div>
+        <div class="li-meta">${escapeHtml([person.title, person.institution, gradYears(person)].filter(Boolean).join(' · ')) || '—'}</div>
+      </div>
+      ${person.honors && person.honors.length ? `<span class="badge badge-ok">${escapeHtml(person.honors[0])}</span>` : ''}`;
+    item.addEventListener('click', () => {
+      list.hidden = true;
+      $('hero-input').value = person.name;
+      centerOnPerson(person.id);
+    });
+    list.appendChild(item);
+  }
+  list.hidden = false;
+}
+
+function bindHeroSearch() {
+  $('hero-input').addEventListener('input', () => {
+    clearTimeout(heroTimer);
+    heroTimer = setTimeout(renderHeroResults, 200);
+  });
+  $('hero-input').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      const results = heroResultsFor($('hero-input').value.trim());
+      if (results.length) {
+        $('hero-results').hidden = true;
+        centerOnPerson(results[0].id);
+      }
+    }
+  });
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.hero-box')) $('hero-results').hidden = true;
+  });
+}
+
+/* ================= 图谱 ================= */
 
 let cy = null;
 
@@ -151,12 +233,12 @@ function ensureCy() {
           'font-size': 11,
           color: '#2b2623',
           'background-color': '#a9bcd4',
-          width: 38,
-          height: 38,
+          width: 40,
+          height: 40,
           'border-width': 1.5,
           'border-color': '#6f89ab',
-          'text-wrap': 'wrap',
-          'text-max-width': 96,
+          'text-wrap': 'ellipsis',
+          'text-max-width': 110,
         },
       },
       {
@@ -166,8 +248,8 @@ function ensureCy() {
       {
         selector: 'node.center',
         style: {
-          width: 52,
-          height: 52,
+          width: 54,
+          height: 54,
           'background-color': '#e6b93c',
           'border-color': '#b98a12',
           'border-width': 3,
@@ -176,12 +258,7 @@ function ensureCy() {
       },
       {
         selector: 'node.selected',
-        style: {
-          'border-width': 3,
-          'border-color': '#b3362c',
-          width: 48,
-          height: 48,
-        },
+        style: { 'border-width': 3, 'border-color': '#b3362c', width: 48, height: 48 },
       },
       {
         selector: 'edge',
@@ -192,7 +269,18 @@ function ensureCy() {
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier',
           'arrow-scale': 1.05,
+          label: 'data(relLabel)',
+          'font-size': 9,
+          color: '#817873',
+          'text-rotation': 'autorotate',
+          'text-background-color': '#ffffff',
+          'text-background-opacity': 0.85,
+          'text-background-padding': '2px',
         },
+      },
+      {
+        selector: 'edge[relationship_type = "phd"]',
+        style: { width: 2.4, 'line-color': '#b3362c', 'target-arrow-color': '#b3362c' },
       },
     ],
     layout: { name: 'preset' },
@@ -206,8 +294,7 @@ function ensureCy() {
       event.target.addClass('selected');
       renderPersonDetails(person, 'graph');
     } else {
-      state.selectedId = person.id;
-      loadLineage(person.id, 3, 2);
+      centerOnPerson(person.id);
     }
   });
   cy.on('tap', 'edge', (event) => {
@@ -232,13 +319,21 @@ function renderGraph(nodes, edges) {
         classes,
       };
     }),
-    ...edges.map((e) => ({ data: { id: e.id, source: e.mentor_id, target: e.student_id, ...e } })),
+    ...edges.map((e) => ({
+      data: {
+        id: e.id,
+        source: e.mentor_id,
+        target: e.student_id,
+        relLabel: REL_TYPE_SHORT[e.relationship_type] || e.relationship_type,
+        ...e,
+      },
+    })),
   ];
   cyGraph.elements().remove();
   cyGraph.add(elements);
   const layout = state.graphMode === 'overview'
     ? { name: 'cose', padding: 45, animate: false, nodeRepulsion: 9000 }
-    : { name: 'breadthfirst', directed: true, roots: `#${state.centerId}`, padding: 45, spacingFactor: 1.2 };
+    : { name: 'breadthfirst', directed: true, roots: `#${state.centerId}`, padding: 50, spacingFactor: 1.25 };
   cyGraph.layout(layout).run();
   cyGraph.fit(undefined, 55);
 }
@@ -265,56 +360,72 @@ function loadNetwork() {
   const { nodes, edges } = graphFilteredData();
   state.graphMode = 'overview';
   renderGraph(nodes, edges);
-  $('back-overview').hidden = true;
-  $('graph-info').textContent = `总览：${nodes.length} 个节点 / ${edges.length} 条边 · 点击节点或边查看详情`;
+  $('lineage-toolbar').hidden = true;
+  $('advanced-filters').hidden = false;
+  $('graph-info').textContent = '';
   if (!state.selectedId || !nodes.some((n) => n.id === state.selectedId)) {
     state.selectedId = null;
     $('graph-detail-title').textContent = '详情';
-    $('graph-detail-content').innerHTML = GRAPH_DETAIL_HINT;
+    $('graph-detail-content').innerHTML = '在顶部搜索框输入你的姓名或导师姓名，直接看到你的谱系。';
   }
 }
 
-function loadLineage(personId, up, down) {
+function walkUp(personId, up) {
   const mentorOf = new Map();
-  const studentsOf = new Map();
   for (const rel of state.relationships) {
     if (!mentorOf.has(rel.student_id)) mentorOf.set(rel.student_id, []);
     mentorOf.get(rel.student_id).push(rel);
-    if (!studentsOf.has(rel.mentor_id)) studentsOf.set(rel.mentor_id, []);
-    studentsOf.get(rel.mentor_id).push(rel);
   }
-
   const nodeIds = new Set([personId]);
   const edgeIds = new Set();
-
   let frontier = new Set([personId]);
+  let gens = 0;
+  let leaf = personId;
   for (let i = 0; i < up; i += 1) {
     const next = new Set();
     for (const id of frontier) {
       for (const rel of mentorOf.get(id) || []) {
+        if (!typeOk(rel)) continue;
         edgeIds.add(rel.id);
-        if (!nodeIds.has(rel.mentor_id)) next.add(rel.mentor_id);
+        if (!nodeIds.has(rel.mentor_id)) {
+          next.add(rel.mentor_id);
+          leaf = rel.mentor_id;
+        }
       }
     }
+    if (!next.size) break;
+    gens += 1;
     frontier = next;
     next.forEach((id) => nodeIds.add(id));
-    if (!frontier.size) break;
   }
+  return { nodeIds, edgeIds, gens, leaf };
+}
 
-  frontier = new Set([personId]);
+function walkDown(personId, down, nodeIds, edgeIds) {
+  const studentsOf = new Map();
+  for (const rel of state.relationships) {
+    if (!studentsOf.has(rel.mentor_id)) studentsOf.set(rel.mentor_id, []);
+    studentsOf.get(rel.mentor_id).push(rel);
+  }
+  let frontier = new Set([personId]);
   for (let i = 0; i < down; i += 1) {
     const next = new Set();
     for (const id of frontier) {
       for (const rel of studentsOf.get(id) || []) {
+        if (!typeOk(rel)) continue;
         edgeIds.add(rel.id);
         if (!nodeIds.has(rel.student_id)) next.add(rel.student_id);
       }
     }
+    if (!next.size) break;
     frontier = next;
     next.forEach((id) => nodeIds.add(id));
-    if (!frontier.size) break;
   }
+}
 
+function loadLineage(personId, up, down) {
+  const { nodeIds, edgeIds, gens, leaf } = walkUp(personId, up);
+  walkDown(personId, down, nodeIds, edgeIds);
   const nodes = [...nodeIds].map((id) => state.byId.get(id)).filter(Boolean);
   const edges = [...edgeIds].map((id) => state.relationships.find((r) => r.id === id)).filter(Boolean);
   state.graphMode = 'lineage';
@@ -322,56 +433,100 @@ function loadLineage(personId, up, down) {
   state.up = up;
   state.down = down;
   state.selectedId = personId;
+  state.lastUpGens = gens;
+  state.lastUpLeaf = leaf;
   renderGraph(nodes, edges);
-  $('back-overview').hidden = false;
+  $('lineage-toolbar').hidden = false;
+  $('advanced-filters').hidden = true;
+  $('hero-results').hidden = true;
   const center = state.byId.get(personId);
+  const typeLabel = state.lineageType === 'phd' ? '博士谱系' : '全部类型';
   $('graph-info').textContent =
-    `以 ${center ? center.name : personId} 为中心 · 向上 ${up} 代 · 向下 ${down} 代 · ` +
-    `${nodes.length} 个节点 / ${edges.length} 条边`;
-  if (center) renderPersonDetails(center, 'graph');
+    `${typeLabel} · 上溯 ${gens} 代 · ${nodes.length} 个节点 / ${edges.length} 条边`;
+  if (center) {
+    $('hero-input').value = center.name;
+    renderLineageDetail(center, gens, leaf);
+  }
+  updateHash(personId);
 }
 
 function centerOnPerson(personId) {
+  state.graphMode = 'lineage';
+  state.centerId = personId;
+  state.up = 3;
+  state.down = 2;
   switchPage('graph');
-  loadLineage(personId, 3, 2);
 }
 
-function expandUp() {
-  if (state.graphMode !== 'lineage' || state.up >= 10 || !state.centerId) return;
-  state.up += 1;
-  loadLineage(state.centerId, state.up, state.down);
+/* ================= 谱系答案与缺口 ================= */
+
+function directMentors(personId) {
+  return state.relationships.filter((r) => r.student_id === personId && typeOk(r));
 }
 
-function expandDown() {
-  if (state.graphMode !== 'lineage' || state.down >= 10 || !state.centerId) return;
-  state.down += 1;
-  loadLineage(state.centerId, state.up, state.down);
-}
-
-/* ================= 详情 ================= */
-
-const DETAIL_IDS = {
-  graph: { title: 'graph-detail-title', content: 'graph-detail-content' },
-  scholar: { title: 'scholar-detail-title', content: 'scholar-detail-content' },
-};
-
-function setDetail(container, title, html) {
-  const ids = DETAIL_IDS[container];
-  $(ids.title).textContent = title;
-  $(ids.content).innerHTML = html;
+function renderLineageDetail(center, gens, leaf) {
+  const direct = directMentors(center.id);
+  const label = state.lineageType === 'phd' ? '博士导师' : '导师';
+  let lines = '';
+  if (direct.length) {
+    const names = direct.map((r) => {
+      const mentor = state.byId.get(r.mentor_id);
+      return `<strong>${escapeHtml(mentor?.name || '未知')}</strong>`;
+    }).join('、');
+    lines += `<p class="answer">你的${label}：${names}${direct.length > 1 ? '（联合指导）' : ''}</p>`;
+    // 每位直接导师再上溯一代
+    for (const rel of direct) {
+      const grand = directMentors(rel.mentor_id);
+      for (const g of grand) {
+        const mentor = state.byId.get(rel.mentor_id);
+        const gm = state.byId.get(g.mentor_id);
+        lines += `<p class="answer">${escapeHtml(mentor?.name || '?')} 的${label}：<strong>${escapeHtml(gm?.name || '未知')}</strong></p>`;
+      }
+    }
+  } else {
+    lines += `<p class="answer gap">暂无已收录的${label}记录。</p>`;
+  }
+  const gap = direct.length && gens <= 1
+    ? `<p class="gap-note">目前已收录 ${gens} 代；${escapeHtml(state.byId.get(leaf)?.name || '该学者')} 的导师资料尚未收录。</p>`
+    : direct.length && leaf && gens > 1
+      ? `<p class="gap-note">目前已收录 ${gens} 代；更早的导师资料尚未收录。</p>`
+      : '';
+  $('graph-detail-title').textContent = `学者：${center.name}`;
+  $('graph-detail-content').innerHTML = `
+    <div class="answer-card">${lines}${gap}</div>
+    <dl class="detail-list">
+      ${center.title ? `<dt>职称/头衔</dt><dd>${escapeHtml(center.title)}</dd>` : ''}
+      ${center.institution ? `<dt>机构</dt><dd>${escapeHtml(center.institution)}</dd>` : ''}
+      ${center.field ? `<dt>研究方向</dt><dd>${escapeHtml(center.field)}</dd>` : ''}
+      ${center.editorial_roles && center.editorial_roles.length
+        ? `<dt>编委会任职</dt><dd>${escapeHtml(center.editorial_roles.join('、'))}</dd>` : ''}
+      ${center.honors && center.honors.length
+        ? `<dt>荣誉 / 人才称号</dt><dd>${escapeHtml(center.honors.join('、'))}</dd>` : ''}
+      <dt>主页</dt><dd><a href="${escapeHtml(center.homepage_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(center.homepage_url)}</a></dd>
+    </dl>
+    <div class="detail-actions">
+      <button class="btn btn-primary btn-small" data-action="supplement-mentor">补充这位学者的导师</button>
+      <button class="btn btn-small" data-action="copy-link">复制谱系链接</button>
+      <button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
+      <button class="btn btn-small" data-action="expand-down">↓ 向下展开一代</button>
+    </div>
+  `;
 }
 
 function renderPersonDetails(person, container) {
+  const direct = directMentors(person.id);
+  const label = state.lineageType === 'phd' ? '博士导师' : '导师';
+  const answer = direct.length
+    ? `<p class="answer">${label}：<strong>${escapeHtml(direct.map((r) => state.byId.get(r.mentor_id)?.name || '未知').join('、'))}</strong></p>`
+    : `<p class="answer gap">暂无已收录的${label}记录。</p>`;
   const actions = `
     <div class="detail-actions">
-      <button class="btn btn-primary btn-small" data-action="center-person">以该学者为中心</button>
-      ${container === 'graph'
-        ? `<button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
-           <button class="btn btn-small" data-action="expand-down">↓ 向下展开一代</button>
-           <button class="btn btn-small" data-action="reset-view">重置视图</button>`
-        : ''}
+      <button class="btn btn-primary btn-small" data-action="center-person">查看导师链</button>
+      <button class="btn btn-small" data-action="copy-link">复制谱系链接</button>
+      <button class="btn btn-small" data-action="supplement-mentor">补充这位学者的导师</button>
     </div>`;
   setDetail(container, `学者：${person.name}`, `
+    <div class="answer-card">${answer}</div>
     <dl class="detail-list">
       <dt>姓名</dt><dd>${escapeHtml(person.name)}</dd>
       ${person.name_en ? `<dt>英文名</dt><dd>${escapeHtml(person.name_en)}</dd>` : ''}
@@ -408,6 +563,34 @@ function renderRelationshipDetails(rel) {
       ${rel.evidence_text ? `<dt>证据说明</dt><dd>${escapeHtml(rel.evidence_text)}</dd>` : ''}
     </dl>
   `;
+}
+
+/* ================= 分享链接 ================= */
+
+function updateHash(personId) {
+  try {
+    history.replaceState(null, '', `#/scholar/${personId}`);
+  } catch (error) { /* 忽略 */ }
+}
+
+function handleHashRoute() {
+  const match = (location.hash || '').match(/^#\/scholar\/(.+)$/);
+  if (!match) return;
+  const person = state.byId.get(decodeURIComponent(match[1]));
+  if (person) centerOnPerson(person.id);
+}
+
+async function copyLineageLink() {
+  const person = state.byId.get(state.centerId) || state.byId.get(state.selectedId);
+  if (!person) return;
+  const url = `${location.origin}${location.pathname}#/scholar/${person.id}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    $('graph-detail-content').insertAdjacentHTML('afterbegin',
+      '<p class="status ok">✓ 谱系链接已复制，可以直接发给导师或朋友核对。</p>');
+  } catch (error) {
+    window.prompt('复制失败，请手动复制链接：', url);
+  }
 }
 
 /* ================= 学者库页 ================= */
@@ -459,12 +642,33 @@ function refreshScholarList() {
 
 /* ================= 投稿页 ================= */
 
+function populateStudentSelect() {
+  const select = $('c-student-select');
+  const current = select.value;
+  select.innerHTML = '<option value="">— 新增学者 —</option>';
+  for (const person of state.people) {
+    const option = document.createElement('option');
+    option.value = person.id;
+    option.textContent = person.name;
+    select.appendChild(option);
+  }
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function prefillStudent(personId) {
+  const person = state.byId.get(personId);
+  if (!person) return;
+  $('c-student-select').value = personId;
+  $('c-student-name').value = person.name || '';
+  $('c-student-url').value = person.homepage_url || '';
+  $('c-mentor-name').focus();
+}
+
 function generateContribution() {
   const required = [
-    ['c-mentor-name', '导师姓名'],
-    ['c-mentor-url', '导师主页 URL'],
     ['c-student-name', '学生姓名'],
-    ['c-student-url', '学生主页 URL'],
+    ['c-mentor-name', '导师姓名'],
+    ['c-evidence', '证据 URL 或说明'],
   ];
   for (const [id, label] of required) {
     if (!$(id).value.trim()) {
@@ -476,12 +680,12 @@ function generateContribution() {
   const payload = {
     mentor: {
       name: $('c-mentor-name').value.trim(),
-      homepage_url: $('c-mentor-url').value.trim(),
+      homepage_url: $('c-mentor-url').value.trim() || null,
       title: $('c-mentor-title').value.trim() || null,
     },
     student: {
       name: $('c-student-name').value.trim(),
-      homepage_url: $('c-student-url').value.trim(),
+      homepage_url: $('c-student-url').value.trim() || null,
       title: $('c-student-title').value.trim() || null,
     },
     relationship: {
@@ -490,7 +694,8 @@ function generateContribution() {
       start_year: $('c-start').value ? parseInt($('c-start').value, 10) : null,
       end_year: $('c-end').value ? parseInt($('c-end').value, 10) : null,
       institution: $('c-institution').value.trim() || null,
-      evidence_url: $('c-evidence').value.trim() || $('c-student-url').value.trim(),
+      student_placement: $('c-placement').value.trim() || null,
+      evidence_url: $('c-evidence').value.trim(),
       evidence_text: $('c-evidence-text').value.trim() || null,
     },
   };
@@ -501,14 +706,18 @@ function generateContribution() {
   };
   $('c-output').value = JSON.stringify(envelope, null, 2);
   $('c-copy').disabled = false;
-  $('c-status').textContent = '已生成。复制后发送给管理员（微信 / 邮件等）。';
-  $('c-status').className = 'status ok';
+  $('c-receipt').hidden = false;
+  $('c-status').textContent = '';
+  $('c-status').className = 'status';
+  $('c-receipt').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 async function copyContribution() {
   try {
     await navigator.clipboard.writeText($('c-output').value);
-    $('c-status').textContent = '已复制到剪贴板，去粘贴发送给管理员吧。';
+    $('c-copy').textContent = '✓ 已复制，请发送给管理员';
+    $('c-copy').disabled = true;
+    $('c-status').textContent = '投稿内容已复制。发送给管理员后，审核通过即可出现在公开图谱。';
     $('c-status').className = 'status ok';
   } catch (error) {
     $('c-output').select();
@@ -533,13 +742,33 @@ function bindGraphControls() {
     ['g-institution', 'g-title', 'g-honor', 'g-type'].forEach((id) => { $(id).value = ''; });
     loadNetwork();
   });
+  $('browse-all').addEventListener('click', () => {
+    state.selectedId = state.centerId;
+    loadNetwork();
+  });
   $('back-overview').addEventListener('click', () => {
     state.selectedId = state.centerId;
     loadNetwork();
   });
+  $('lineage-type').addEventListener('change', () => {
+    state.lineageType = $('lineage-type').value;
+    if (state.centerId) loadLineage(state.centerId, 3, 2);
+  });
   $('expand-up').addEventListener('click', expandUp);
   $('expand-down').addEventListener('click', expandDown);
   $('reset-view').addEventListener('click', () => ensureCy().fit(undefined, 55));
+}
+
+function expandUp() {
+  if (state.graphMode !== 'lineage' || state.up >= 10 || !state.centerId) return;
+  state.up += 1;
+  loadLineage(state.centerId, state.up, state.down);
+}
+
+function expandDown() {
+  if (state.graphMode !== 'lineage' || state.down >= 10 || !state.centerId) return;
+  state.down += 1;
+  loadLineage(state.centerId, state.up, state.down);
 }
 
 function bindScholarControls() {
@@ -558,6 +787,13 @@ function bindScholarControls() {
 }
 
 function bindContributeControls() {
+  $('c-student-select').addEventListener('change', () => {
+    const person = state.byId.get($('c-student-select').value);
+    if (person) {
+      $('c-student-name').value = person.name || '';
+      $('c-student-url').value = person.homepage_url || '';
+    }
+  });
   $('c-generate').addEventListener('click', generateContribution);
   $('c-copy').addEventListener('click', copyContribution);
 }
@@ -567,7 +803,18 @@ function bindDetailActions() {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
     const action = button.dataset.action;
-    if (action === 'center-person') centerOnPerson(state.selectedId || state.centerId);
+    if (action === 'center-person') {
+      const personId = state.selectedId || state.centerId;
+      if (personId) centerOnPerson(personId);
+    }
+    if (action === 'supplement-mentor') {
+      const personId = state.centerId || state.selectedId;
+      if (personId) {
+        switchPage('contribute');
+        prefillStudent(personId);
+      }
+    }
+    if (action === 'copy-link') copyLineageLink();
     if (action === 'expand-up') expandUp();
     if (action === 'expand-down') expandDown();
     if (action === 'reset-view') ensureCy().fit(undefined, 55);
@@ -578,6 +825,7 @@ function bindDetailActions() {
 
 function initApp() {
   bindNav();
+  bindHeroSearch();
   bindGraphControls();
   bindScholarControls();
   bindContributeControls();
@@ -596,4 +844,5 @@ if (typeof cytoscape === 'undefined') {
 } else {
   initApp();
 }
+
 

@@ -121,6 +121,19 @@ def test_get_lineage_clamps_depth_to_10(app):
     assert result["down"] == 0
 
 
+def test_get_lineage_filters_by_relationship_type(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})
+        student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "master",
+                           "evidence_url": "https://example.edu/s"})
+        phd_only = get_lineage(student["id"], 3, 2, relationship_type="phd")
+        all_types = get_lineage(student["id"], 3, 2)
+    assert phd_only["edges"] == []
+    assert {n["id"] for n in phd_only["nodes"]} == {student["id"]}
+    assert len(all_types["edges"]) == 1
+
+
 def test_update_mentorship_changes_only_allowed_fields(app):
     with app.app_context():
         mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})

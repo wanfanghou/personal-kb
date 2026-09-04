@@ -113,6 +113,7 @@ def get_lineage(person_id):
             person_id,
             request.args.get("up", "3"),
             request.args.get("down", "2"),
+            request.args.get("type") or None,
         )
     except services.NotFoundError as error:
         return jsonify({"error": str(error)}), 404

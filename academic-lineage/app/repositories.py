@@ -432,14 +432,21 @@ def update_person(person_id: str, fields: dict) -> dict | None:
     return get_person(person_id)
 
 
-def get_lineage(person_id: str, up: int, down: int) -> dict:
-    """BFS lineage: mentors of the person (up generations) and students (down generations)."""
+def get_lineage(person_id: str, up: int, down: int, relationship_type: str | None = None) -> dict:
+    """BFS lineage: mentors of the person (up generations) and students (down generations).
+
+    When relationship_type is set, only mentorships of that type are walked,
+    which powers the "phd-only" (博士谱系) reading mode.
+    """
     db = get_db()
     up = max(0, min(int(up), MAX_LINEAGE_DEPTH))
     down = max(0, min(int(down), MAX_LINEAGE_DEPTH))
     center = get_person(person_id)
     if center is None:
         raise KeyError(f"person not found: {person_id}")
+
+    type_clause = " AND relationship_type = ?" if relationship_type else ""
+    type_params = (relationship_type,) if relationship_type else ()
 
     nodes: dict[str, dict] = {center["id"]: center}
     edges: dict[str, dict] = {}
@@ -462,8 +469,8 @@ def get_lineage(person_id: str, up: int, down: int) -> dict:
             break
         placeholders = ",".join("?" * len(frontier))
         rows = db.execute(
-            f"SELECT * FROM mentorships WHERE student_id IN ({placeholders})",
-            tuple(frontier),
+            f"SELECT * FROM mentorships WHERE student_id IN ({placeholders}){type_clause}",
+            tuple(frontier) + type_params,
         ).fetchall()
         next_frontier = set()
         for row in rows:
@@ -480,8 +487,8 @@ def get_lineage(person_id: str, up: int, down: int) -> dict:
             break
         placeholders = ",".join("?" * len(frontier))
         rows = db.execute(
-            f"SELECT * FROM mentorships WHERE mentor_id IN ({placeholders})",
-            tuple(frontier),
+            f"SELECT * FROM mentorships WHERE mentor_id IN ({placeholders}){type_clause}",
+            tuple(frontier) + type_params,
         ).fetchall()
         next_frontier = set()
         for row in rows:

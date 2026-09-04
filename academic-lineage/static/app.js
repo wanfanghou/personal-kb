@@ -9,6 +9,7 @@ const state = {
   up: 3,
   down: 2,
   selectedId: null,
+  lineageType: 'phd', // 'phd' | ''（博士谱系 / 全部类型）
 };
 
 const detail = {
@@ -26,6 +27,7 @@ const REL_TYPE_ZH = {
   informal: '非正式指导',
   other: '其他',
 };
+const REL_TYPE_SHORT = { phd: '博士', master: '硕士', postdoc: '博后', informal: '非正式', other: '其他' };
 const STATUS_ZH = { draft: '草稿', verified: '已确认', rejected: '已拒绝' };
 const CONFIDENCE_ZH = { confirmed: 'confirmed 已确认', probable: 'probable 很可能', uncertain: 'uncertain 不确定' };
 
@@ -170,12 +172,12 @@ function ensureCy() {
           'font-size': 11,
           color: '#2b2623',
           'background-color': '#a9bcd4',
-          width: 38,
-          height: 38,
+          width: 40,
+          height: 40,
           'border-width': 1.5,
           'border-color': '#6f89ab',
-          'text-wrap': 'wrap',
-          'text-max-width': 96,
+          'text-wrap': 'ellipsis',
+          'text-max-width': 110,
         },
       },
       {
@@ -211,7 +213,22 @@ function ensureCy() {
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier',
           'arrow-scale': 1.05,
+          label: 'data(relLabel)',
+          'font-size': 9,
+          color: '#817873',
+          'text-rotation': 'autorotate',
+          'text-background-color': '#ffffff',
+          'text-background-opacity': 0.85,
+          'text-background-padding': '2px',
         },
+      },
+      {
+        selector: 'edge[relationship_type = "phd"]',
+        style: { width: 2.4, 'line-color': '#b3362c', 'target-arrow-color': '#b3362c' },
+      },
+      {
+        selector: 'edge[status != "verified"]',
+        style: { 'line-style': 'dashed', 'line-color': '#c9c0b8', 'target-arrow-color': '#c9c0b8' },
       },
     ],
     layout: { name: 'preset' },
@@ -249,7 +266,13 @@ function renderGraph(nodes, edges) {
       };
     }),
     ...edges.map((e) => ({
-      data: { id: e.id, source: e.mentor_id, target: e.student_id, ...e },
+      data: {
+        id: e.id,
+        source: e.mentor_id,
+        target: e.student_id,
+        relLabel: REL_TYPE_SHORT[e.relationship_type] || e.relationship_type,
+        ...e,
+      },
     })),
   ];
   cyGraph.elements().remove();
@@ -296,8 +319,9 @@ async function loadNetwork() {
 
 async function loadLineage(personId, up, down) {
   try {
+    const typeParam = state.lineageType ? `&type=${state.lineageType}` : '';
     const data = await api(
-      `/api/persons/${encodeURIComponent(personId)}/lineage?up=${up}&down=${down}`
+      `/api/persons/${encodeURIComponent(personId)}/lineage?up=${up}&down=${down}${typeParam}`
     );
     state.graphMode = 'lineage';
     state.centerId = data.center_id;
@@ -306,19 +330,25 @@ async function loadLineage(personId, up, down) {
     state.selectedId = data.center_id;
     renderGraph(data.nodes, data.edges);
     $('back-overview').hidden = false;
+    $('lineage-type').hidden = false;
     const center = data.nodes.find((n) => n.id === data.center_id);
+    const typeLabel = state.lineageType === 'phd' ? '博士谱系' : '全部类型';
     $('graph-info').textContent =
-      `以 ${center ? center.name : data.center_id} 为中心 · 向上 ${data.up} 代 · 向下 ${data.down} 代 · ` +
+      `以 ${center ? center.name : data.center_id} 为中心 · ${typeLabel} · 向上 ${data.up} 代 · 向下 ${data.down} 代 · ` +
       `${data.nodes.length} 个节点 / ${data.edges.length} 条边`;
     if (center) renderPersonDetails(center, 'graph');
+    updateHash(data.center_id);
   } catch (error) {
     $('graph-info').textContent = `加载失败：${error.message}`;
   }
 }
 
 function centerOnPerson(personId) {
+  state.graphMode = 'lineage';
+  state.centerId = personId;
+  state.up = 3;
+  state.down = 2;
   switchPage('graph');
-  loadLineage(personId, 3, 2);
 }
 
 function expandUp() {
@@ -336,6 +366,26 @@ function expandDown() {
 function refreshGraphAfterChange() {
   if (state.graphMode === 'overview' || !state.centerId) loadNetwork();
   else loadLineage(state.centerId, state.up, state.down);
+}
+
+/* ================= 分享链接 ================= */
+
+function updateHash(personId) {
+  try {
+    history.replaceState(null, '', `#/scholar/${personId}`);
+  } catch (error) { /* 忽略 */ }
+}
+
+async function copyLineageLink() {
+  const person = detail.person;
+  if (!person) return;
+  const url = `${location.origin}${location.pathname}#/scholar/${person.id}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    setDetail(detail.personContainer, `学者：${person.name}`, '<p class="status ok">✓ 谱系链接已复制。</p>');
+  } catch (error) {
+    window.prompt('复制失败，请手动复制链接：', url);
+  }
 }
 
 /* ================= 删除 ================= */
@@ -389,8 +439,9 @@ function renderPersonDetails(person, container) {
   detail.personContainer = container;
   const actions = `
     <div class="detail-actions">
-      <button class="btn btn-primary btn-small" data-action="center-person">以该学者为中心</button>
+      <button class="btn btn-primary btn-small" data-action="center-person">查看导师链</button>
       <button class="btn btn-small" data-action="edit-person">编辑学者信息</button>
+      <button class="btn btn-small" data-action="copy-link">复制谱系链接</button>
       <button class="btn btn-danger btn-small" data-action="delete-person">删除学者</button>
       ${container === 'graph'
         ? `<button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
@@ -1105,6 +1156,10 @@ function bindGraphControls() {
     $(id).addEventListener('change', loadNetwork);
   });
   $('g-public').addEventListener('change', loadNetwork);
+  $('lineage-type').addEventListener('change', () => {
+    state.lineageType = $('lineage-type').value;
+    if (state.centerId) loadLineage(state.centerId, 3, 2);
+  });
   $('g-clear').addEventListener('click', () => {
     ['g-institution', 'g-title', 'g-honor', 'g-type', 'g-start-year', 'g-end-year'].forEach((id) => { $(id).value = ''; });
     $('g-public').checked = false;
@@ -1164,6 +1219,7 @@ function bindDetailActions() {
     if (!button) return;
     const action = button.dataset.action;
     if (action === 'center-person' && detail.person) centerOnPerson(detail.person.id);
+    if (action === 'copy-link') copyLineageLink();
     if (action === 'edit-person' && detail.person) renderPersonEditForm(detail.person);
     if (action === 'save-person') savePersonEdit();
     if (action === 'edit-relationship' && detail.mentorship) renderRelationshipEditForm(detail.mentorship);
@@ -1201,6 +1257,15 @@ function initApp() {
   refreshRelationshipList();
   refreshSubmissionList();
   refreshPendingBadge();
+  handleHashRoute();
+}
+
+function handleHashRoute() {
+  const match = (location.hash || '').match(/^#\/scholar\/(.+)$/);
+  if (!match) return;
+  const personId = decodeURIComponent(match[1]);
+  switchPage('graph');
+  loadLineage(personId, 3, 2).catch(() => loadNetwork());
 }
 
 if (typeof cytoscape === 'undefined') {

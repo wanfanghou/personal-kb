@@ -207,7 +207,7 @@ def create_mentorship_service(payload: dict) -> dict:
         raise NotFoundError(str(error)) from error
 
 
-def lineage_service(person_id: str, up="3", down="2") -> dict:
+def lineage_service(person_id: str, up="3", down="2", relationship_type: str | None = None) -> dict:
     if not person_id:
         raise ValidationError("person id is required")
     try:
@@ -217,8 +217,10 @@ def lineage_service(person_id: str, up="3", down="2") -> dict:
         raise ValidationError("up and down must be integers")
     if not (0 <= up_i <= MAX_LINEAGE_DEPTH and 0 <= down_i <= MAX_LINEAGE_DEPTH):
         raise ValidationError(f"lineage depth must be between 0 and {MAX_LINEAGE_DEPTH}")
+    if relationship_type and relationship_type not in repositories.RELATIONSHIP_TYPES:
+        raise ValidationError(f"invalid relationship_type: {relationship_type}")
     try:
-        return repositories.get_lineage(person_id, up_i, down_i)
+        return repositories.get_lineage(person_id, up_i, down_i, relationship_type or None)
     except KeyError as error:
         raise NotFoundError(str(error)) from error
 
