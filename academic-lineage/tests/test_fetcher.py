@@ -5,6 +5,7 @@ import pytest
 
 from app.fetcher import (
     _default_ssl_context,
+    _legacy_ssl_context,
     parse_html_metadata,
     preview_person_url,
     validate_url,
@@ -15,6 +16,12 @@ def test_default_ssl_context_verifies_certs():
     context = _default_ssl_context()
     assert isinstance(context, ssl.SSLContext)
     assert context.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_legacy_ssl_context_verifies_and_caps_tls_version():
+    context = _legacy_ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.maximum_version == ssl.TLSVersion.TLSv1_2
 
 
 def test_metadata_prefers_og_title_and_author():
@@ -120,3 +127,22 @@ def test_preview_reports_http_error_without_raising():
     result = preview_person_url("https://example.edu/jane", opener=opener)
     assert result["http_status"] == 404
     assert result["fetch_error"]
+
+
+def test_preview_retries_with_fallback_on_handshake_failure():
+    failing = _FakeOpener(error=urllib.error.URLError(
+        ssl.SSLError(1, "[SSL: SSLV3_ALERT_HANDSHAKE_FAILURE] ssl/tls alert handshake failure")))
+    ok = _FakeOpener(_FakeResponse())
+    result = preview_person_url(
+        "https://example.edu/jane", opener=failing, fallback_opener=ok)
+    assert result["fetch_error"] is None
+    assert result["http_status"] == 200
+
+
+def test_preview_does_not_retry_non_handshake_errors():
+    failing = _FakeOpener(error=urllib.error.URLError("connection refused"))
+    fallback = _FakeOpener(_FakeResponse())
+    result = preview_person_url(
+        "https://example.edu/jane", opener=failing, fallback_opener=fallback)
+    assert result["fetch_error"]
+    assert result["http_status"] is None

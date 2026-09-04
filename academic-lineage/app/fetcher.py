@@ -31,10 +31,28 @@ def _default_ssl_context():
     return ssl.create_default_context()
 
 
-def _build_default_opener():
+def _legacy_ssl_context():
+    """Context for servers that only support legacy TLS 1.2 ciphers.
+
+    Some older university web servers (e.g. myweb.cuhk.edu.cn) reject
+    OpenSSL's modern default cipher list by sending an SSL handshake
+    alert. Capping the version at TLS 1.2 and lowering the security
+    level re-enables the legacy CBC cipher suites these servers need,
+    while certificate verification stays on.
+    """
+    if _CA_BUNDLE:
+        context = ssl.create_default_context(cafile=_CA_BUNDLE)
+    else:
+        context = ssl.create_default_context()
+    context.maximum_version = ssl.TLSVersion.TLSv1_2
+    context.set_ciphers("DEFAULT:@SECLEVEL=1")
+    return context
+
+
+def _build_default_opener(context=None):
     return urllib.request.build_opener(
         _LimitedRedirectHandler(),
-        urllib.request.HTTPSHandler(context=_default_ssl_context()),
+        urllib.request.HTTPSHandler(context=context or _default_ssl_context()),
     )
 
 _SEPARATORS = re.compile(r"\s*[|·•—–,;:]+\s*")
@@ -136,9 +154,7 @@ class _LimitedRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def preview_person_url(url: str, opener=None) -> dict:
-    """Fetch minimal metadata for a homepage URL. Never raises on network errors."""
-    normalized_url = validate_url(url)
+def _fetch_preview(normalized_url: str, opener) -> dict:
     result = {
         "normalized_url": normalized_url,
         "title": "",
@@ -148,8 +164,6 @@ def preview_person_url(url: str, opener=None) -> dict:
         "fetch_error": None,
     }
     try:
-        if opener is None:
-            opener = _build_default_opener()
         request = urllib.request.Request(
             normalized_url,
             headers={
@@ -180,3 +194,24 @@ def preview_person_url(url: str, opener=None) -> dict:
     except Exception as error:  # timeouts, socket errors, etc.
         result["fetch_error"] = str(error) or type(error).__name__
     return result
+
+
+def _is_handshake_failure(error_message: str) -> bool:
+    return "handshake failure" in (error_message or "").lower()
+
+
+def preview_person_url(url: str, opener=None, fallback_opener=None) -> dict:
+    """Fetch minimal metadata for a homepage URL. Never raises on network errors.
+
+    When the server rejects the modern default TLS handshake, retries once
+    with a legacy TLS 1.2 cipher profile for older university web servers.
+    """
+    normalized_url = validate_url(url)
+    if opener is None:
+        opener = _build_default_opener()
+    result = _fetch_preview(normalized_url, opener)
+    if not _is_handshake_failure(result["fetch_error"]):
+        return result
+    if fallback_opener is None:
+        fallback_opener = _build_default_opener(_legacy_ssl_context())
+    return _fetch_preview(normalized_url, fallback_opener)
