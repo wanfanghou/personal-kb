@@ -27,6 +27,13 @@
       <div class="card">
         <h2>已录入学者</h2>
         <p class="muted hint">数据保存在本地 SQLite（data/network.sqlite），重启或关闭浏览器后仍在。</p>
+        <div class="filter-bar">
+          <select id="filter-institution" title="按机构筛选"><option value="">全部机构</option></select>
+          <select id="filter-title" title="按职称筛选"><option value="">全部职称</option></select>
+          <select id="filter-start-year" title="按入学年份筛选（学生身份）"><option value="">入学年份不限</option></select>
+          <select id="filter-end-year" title="按毕业年份筛选（学生身份）"><option value="">毕业年份不限</option></select>
+          <button id="filter-clear" class="btn btn-small" type="button">清除筛选</button>
+        </div>
         <ul id="person-list" class="result-list"></ul>
       </div>
 

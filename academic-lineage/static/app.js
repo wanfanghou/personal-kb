@@ -201,6 +201,7 @@ async function confirmEntry() {
     await loadLineage(student.person.id, 1, 0);
     clearEntryForm();
     refreshStats();
+    refreshFilterOptions();
     refreshPersonList();
   } catch (error) {
     if (error.status === 409) {
@@ -282,13 +283,62 @@ async function refreshStats() {
   }
 }
 
+function fillSelect(id, values, placeholder) {
+  const select = $(id);
+  const current = select.value;
+  select.innerHTML = '';
+  const first = document.createElement('option');
+  first.value = '';
+  first.textContent = placeholder;
+  select.appendChild(first);
+  for (const value of values) {
+    const option = document.createElement('option');
+    option.value = String(value);
+    option.textContent = String(value);
+    select.appendChild(option);
+  }
+  if ([...select.options].some((option) => option.value === current)) {
+    select.value = current;
+  }
+}
+
+async function refreshFilterOptions() {
+  try {
+    const options = await api('/api/filters');
+    fillSelect('filter-institution', options.institutions, '全部机构');
+    fillSelect('filter-title', options.titles, '全部职称');
+    fillSelect('filter-start-year', options.start_years, '入学年份不限');
+    fillSelect('filter-end-year', options.end_years, '毕业年份不限');
+  } catch (error) {
+    /* 筛选选项加载失败时保持现状 */
+  }
+}
+
+function currentFilterParams() {
+  const params = new URLSearchParams();
+  const institution = $('filter-institution').value;
+  const title = $('filter-title').value;
+  const startYear = $('filter-start-year').value;
+  const endYear = $('filter-end-year').value;
+  if (institution) params.set('institution', institution);
+  if (title) params.set('title', title);
+  if (startYear) params.set('start_year', startYear);
+  if (endYear) params.set('end_year', endYear);
+  return params;
+}
+
 async function refreshPersonList() {
   try {
-    const data = await api('/api/persons?limit=100');
+    const params = new URLSearchParams({ limit: '100' });
+    for (const [key, value] of currentFilterParams()) params.set(key, value);
+    const data = await api(`/api/persons?${params}`);
     const list = $('person-list');
     list.innerHTML = '';
     if (!data.persons.length) {
-      list.innerHTML = '<li class="muted">还没有录入的学者</li>';
+      const activeFilters = [...currentFilterParams().keys()].length;
+      list.innerHTML = activeFilters
+        ? '<li class="muted">没有符合条件的学者，试试调整筛选</li>'
+        : '<li class="muted">还没有录入的学者</li>';
       return;
     }
     for (const person of data.persons) {
@@ -306,6 +356,18 @@ async function refreshPersonList() {
   } catch (error) {
     $('person-list').innerHTML = `<li class="status error">${escapeHtml(error.message)}</li>`;
   }
+}
+
+function bindFilters() {
+  ['filter-institution', 'filter-title', 'filter-start-year', 'filter-end-year'].forEach((id) => {
+    $(id).addEventListener('change', refreshPersonList);
+  });
+  $('filter-clear').addEventListener('click', () => {
+    ['filter-institution', 'filter-title', 'filter-start-year', 'filter-end-year'].forEach((id) => {
+      $(id).value = '';
+    });
+    refreshPersonList();
+  });
 }
 
 /* ---------- 图谱 ---------- */
@@ -508,6 +570,7 @@ async function savePersonEdit(personId) {
     });
     renderPersonDetails(updated.person);
     await loadLineage(personId, state.up, state.down);
+    refreshFilterOptions();
     refreshPersonList();
   } catch (error) {
     $('detail-content').innerHTML = `<p class="status error">保存失败：${escapeHtml(error.message)}</p>`;
@@ -592,7 +655,9 @@ function initApp() {
   $('export-btn').addEventListener('click', exportPublic);
   bindSearch();
   bindDetailActions();
+  bindFilters();
   refreshStats();
+  refreshFilterOptions();
   refreshPersonList();
 }
 

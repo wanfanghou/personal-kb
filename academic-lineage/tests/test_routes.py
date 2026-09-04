@@ -184,6 +184,45 @@ def test_stats_endpoint_returns_counts(app):
     assert response.get_json() == {"persons": 2, "mentorships": 1}
 
 
+def test_list_persons_supports_institution_filter(app):
+    client = app.test_client()
+    client.post("/api/persons", json={"name": "A", "homepage_url": "https://example.edu/a", "institution": "NUS"})
+    client.post("/api/persons", json={"name": "B", "homepage_url": "https://example.edu/b", "institution": "SMU"})
+    response = client.get("/api/persons?institution=NUS")
+    assert response.status_code == 200
+    assert [p["name"] for p in response.get_json()["persons"]] == ["A"]
+
+
+def test_list_persons_supports_year_filter(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={"name": "M", "homepage_url": "https://example.edu/m"}).get_json()
+    s1 = client.post("/api/persons", json={"name": "S1", "homepage_url": "https://example.edu/s1"}).get_json()
+    client.post("/api/persons", json={"name": "S2", "homepage_url": "https://example.edu/s2"})
+    client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": s1["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s1",
+        "start_year": 2018, "end_year": 2023,
+    })
+    response = client.get("/api/persons?start_year=2018")
+    assert response.status_code == 200
+    assert [p["name"] for p in response.get_json()["persons"]] == ["S1"]
+
+
+def test_filters_endpoint_lists_options(app):
+    client = app.test_client()
+    client.post("/api/persons", json={
+        "name": "A", "homepage_url": "https://example.edu/a",
+        "institution": "NUS", "title": "Professor",
+    })
+    response = client.get("/api/filters")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["institutions"] == ["NUS"]
+    assert body["titles"] == ["Professor"]
+    assert body["start_years"] == []
+    assert body["end_years"] == []
+
+
 def test_create_person_stores_title_editorial_and_honors(app):
     client = app.test_client()
     response = client.post("/api/persons", json={

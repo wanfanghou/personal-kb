@@ -140,29 +140,86 @@ def find_or_create_person(data: dict) -> tuple[dict, bool]:
     return get_person(person_id), True
 
 
-def find_persons(query: str, limit: int = 50) -> list[dict]:
+def find_persons(query: str, limit: int = 50, filters: dict | None = None) -> list[dict]:
+    """Search persons by free text and optional filters.
+
+    filters: institution / title (exact) and start_year / end_year
+    (years match mentorships where the person is the student).
+    """
+    filters = filters or {}
     query = (query or "").strip()
+    institution = (filters.get("institution") or "").strip() or None
+    title = (filters.get("title") or "").strip() or None
+    start_year = filters.get("start_year")
+    end_year = filters.get("end_year")
     db = get_db()
-    if not query:
-        rows = db.execute(
-            "SELECT * FROM persons ORDER BY updated_at DESC LIMIT ?",
-            (max(1, min(int(limit), 200)),),
-        ).fetchall()
-        return [_person_to_dict(row) for row in rows]
-    pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-    rows = db.execute(
-        """
-        SELECT * FROM persons
-        WHERE name LIKE ? ESCAPE '\\'
-           OR name_en LIKE ? ESCAPE '\\'
-           OR institution LIKE ? ESCAPE '\\'
-           OR aliases_json LIKE ? ESCAPE '\\'
-        ORDER BY name
-        LIMIT ?
-        """,
-        (pattern, pattern, pattern, pattern, max(1, min(int(limit), 100))),
-    ).fetchall()
+    limit = max(1, min(int(limit), 200))
+
+    where: list[str] = []
+    params: list = []
+    if query:
+        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append(
+            "(name LIKE ? ESCAPE '\\' OR name_en LIKE ? ESCAPE '\\'"
+            " OR institution LIKE ? ESCAPE '\\' OR aliases_json LIKE ? ESCAPE '\\')"
+        )
+        params += [pattern, pattern, pattern, pattern]
+    if institution:
+        where.append("institution = ?")
+        params.append(institution)
+    if title:
+        where.append("title = ?")
+        params.append(title)
+    if start_year not in (None, ""):
+        where.append(
+            "EXISTS (SELECT 1 FROM mentorships m WHERE m.student_id = persons.id AND m.start_year = ?)"
+        )
+        params.append(int(start_year))
+    if end_year not in (None, ""):
+        where.append(
+            "EXISTS (SELECT 1 FROM mentorships m WHERE m.student_id = persons.id AND m.end_year = ?)"
+        )
+        params.append(int(end_year))
+
+    order = "ORDER BY name" if query else "ORDER BY updated_at DESC"
+    sql = "SELECT * FROM persons"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += f" {order} LIMIT ?"
+    params.append(limit)
+    rows = db.execute(sql, params).fetchall()
     return [_person_to_dict(row) for row in rows]
+
+
+def get_filter_options() -> dict:
+    """Distinct values for the filter dropdowns on the management page."""
+    db = get_db()
+    return {
+        "institutions": [
+            row["value"] for row in db.execute(
+                "SELECT DISTINCT institution AS value FROM persons"
+                " WHERE institution IS NOT NULL AND institution <> '' ORDER BY institution"
+            )
+        ],
+        "titles": [
+            row["value"] for row in db.execute(
+                "SELECT DISTINCT title AS value FROM persons"
+                " WHERE title IS NOT NULL AND title <> '' ORDER BY title"
+            )
+        ],
+        "start_years": [
+            row["value"] for row in db.execute(
+                "SELECT DISTINCT start_year AS value FROM mentorships"
+                " WHERE start_year IS NOT NULL ORDER BY start_year"
+            )
+        ],
+        "end_years": [
+            row["value"] for row in db.execute(
+                "SELECT DISTINCT end_year AS value FROM mentorships"
+                " WHERE end_year IS NOT NULL ORDER BY end_year"
+            )
+        ],
+    }
 
 
 def get_mentorship(mentorship_id: str) -> dict | None:

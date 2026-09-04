@@ -169,6 +169,15 @@ input:focus, select:focus { outline: 2px solid #bfdbfe; border-color: var(--prim
 .hint { margin: 0 0 10px; }
 
 .result-list { list-style: none; margin: 8px 0 0; padding: 0; }
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.filter-bar #filter-clear { grid-column: 1 / -1; }
+.filter-bar select { padding: 5px 7px; font-size: 12px; }
 .result-item {
   padding: 7px 8px;
   border-radius: 6px;

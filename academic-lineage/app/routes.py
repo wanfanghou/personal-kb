@@ -55,7 +55,18 @@ def list_persons():
         limit = int(request.args.get("limit", 100))
     except ValueError:
         limit = 100
-    return jsonify({"persons": repositories.find_persons(query, limit)})
+    filters = {
+        "institution": request.args.get("institution"),
+        "title": request.args.get("title"),
+        "start_year": request.args.get("start_year"),
+        "end_year": request.args.get("end_year"),
+    }
+    return jsonify({"persons": repositories.find_persons(query, limit, filters)})
+
+
+@bp.get("/filters")
+def filter_options():
+    return jsonify(repositories.get_filter_options())
 
 
 @bp.get("/persons/<person_id>")

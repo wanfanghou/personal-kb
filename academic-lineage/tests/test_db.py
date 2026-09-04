@@ -4,6 +4,7 @@ from app.repositories import (
     create_mentorship,
     find_or_create_person,
     find_persons,
+    get_filter_options,
     get_lineage,
     normalize_homepage_url,
     update_mentorship,
@@ -173,3 +174,47 @@ def test_update_person_requires_name_if_provided(app):
         person, _ = find_or_create_person({"name": "X", "homepage_url": "https://example.edu/x"})
         with pytest.raises(ValueError, match="name is required"):
             update_person(person["id"], {"name": "   "})
+
+
+def test_filter_persons_by_institution_and_title(app):
+    with app.app_context():
+        find_or_create_person({"name": "A", "homepage_url": "https://example.edu/a",
+                               "institution": "NUS", "title": "Professor"})
+        find_or_create_person({"name": "B", "homepage_url": "https://example.edu/b",
+                               "institution": "SMU", "title": "Assistant Professor"})
+        find_or_create_person({"name": "C", "homepage_url": "https://example.edu/c",
+                               "institution": "NUS", "title": "Assistant Professor"})
+        by_institution = {p["name"] for p in find_persons("", filters={"institution": "NUS"})}
+        by_title = {p["name"] for p in find_persons("", filters={"title": "Assistant Professor"})}
+    assert by_institution == {"A", "C"}
+    assert by_title == {"B", "C"}
+
+
+def test_filter_persons_by_enrollment_and_graduation_year(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})
+        s2015, _ = find_or_create_person({"name": "S2015", "homepage_url": "https://example.edu/s1"})
+        s2018, _ = find_or_create_person({"name": "S2018", "homepage_url": "https://example.edu/s2"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": s2015["id"], "relationship_type": "phd",
+                           "evidence_url": "https://example.edu/s1", "start_year": 2015, "end_year": 2020})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": s2018["id"], "relationship_type": "phd",
+                           "evidence_url": "https://example.edu/s2", "start_year": 2018, "end_year": 2023})
+        by_start = {p["name"] for p in find_persons("", filters={"start_year": 2018})}
+        by_end = {p["name"] for p in find_persons("", filters={"end_year": 2020})}
+    assert by_start == {"S2018"}
+    assert by_end == {"S2015"}
+
+
+def test_get_filter_options_lists_distinct_values(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m",
+                                           "institution": "NUS", "title": "Professor"})
+        student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s",
+                                            "institution": "NUS"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "phd",
+                           "evidence_url": "https://example.edu/s", "start_year": 2020, "end_year": 2025})
+        options = get_filter_options()
+    assert options["institutions"] == ["NUS"]
+    assert options["titles"] == ["Professor"]
+    assert options["start_years"] == [2020]
+    assert options["end_years"] == [2025]
