@@ -7,26 +7,33 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="app">
   <header class="topbar">
-    <h1>学术谱系 · 公开图谱</h1>
+    <div class="brand">
+      <div class="brand-mark">谱</div>
+      <div>
+        <strong>学术谱系</strong>
+        <span>ACADEMIC LINEAGE · PUBLIC</span>
+      </div>
+    </div>
     <div class="topbar-actions">
+      <span id="manifest-info" class="stats-chip"></span>
       <button id="contribute-btn" class="btn btn-primary" type="button">投稿关系</button>
-      <span id="manifest-info" class="muted"></span>
     </div>
   </header>
 
   <main class="layout">
-    <section class="sidebar">
+    <section class="left-col">
       <div class="card">
         <h2>搜索学者</h2>
         <input id="search-input" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
-        <ul id="search-results" class="result-list"></ul>
+        <ul id="search-results" class="list"></ul>
       </div>
-      <div class="card">
+      <div class="card grow">
         <h2>学者列表</h2>
-        <ul id="person-list" class="result-list"></ul>
+        <ul id="person-list" class="list"></ul>
       </div>
-      <p class="muted disclaimer">数据由人工维护，关系以证据链接为准。</p>
+      <p class="muted disclaimer"><span class="live-dot"></span>数据由人工维护，关系以证据链接为准。</p>
     </section>
 
     <section class="graph-panel">
@@ -39,11 +46,12 @@
       <div id="cy"></div>
     </section>
 
-    <aside class="detail-panel card">
+    <aside class="detail-panel">
       <h2 id="detail-title">详情</h2>
-      <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>箭头由导师指向学生；黄色为当前中心学者。</div>
+      <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>箭头由导师指向学生；金色为当前中心学者。</div>
     </aside>
   </main>
+</div>
 
   <!-- ============ 投稿弹窗 ============ -->
   <div id="contribute-modal" class="modal" hidden>
