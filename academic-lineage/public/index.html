@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>学术谱系 · 公开图谱</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>学术谱系 · 公开图谱</h1>
+    <span id="manifest-info" class="muted"></span>
+  </header>
+
+  <main class="layout">
+    <section class="sidebar">
+      <div class="card">
+        <h2>搜索学者</h2>
+        <input id="search-input" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
+        <ul id="search-results" class="result-list"></ul>
+      </div>
+      <div class="card">
+        <h2>学者列表</h2>
+        <ul id="person-list" class="result-list"></ul>
+      </div>
+      <p class="muted disclaimer">数据由人工维护，关系以证据链接为准。</p>
+    </section>
+
+    <section class="graph-panel">
+      <div class="graph-toolbar">
+        <button id="expand-up" class="btn btn-small" type="button">↑ 向上展开一代</button>
+        <button id="expand-down" class="btn btn-small" type="button">↓ 向下展开一代</button>
+        <button id="reset-view" class="btn btn-small" type="button">重置视图</button>
+        <span id="graph-info" class="muted"></span>
+      </div>
+      <div id="cy"></div>
+    </section>
+
+    <aside class="detail-panel card">
+      <h2 id="detail-title">详情</h2>
+      <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>箭头由导师指向学生；黄色为当前中心学者。</div>
+    </aside>
+  </main>
+
+  <script src="vendor/cytoscape.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
