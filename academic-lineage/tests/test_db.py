@@ -134,6 +134,104 @@ def test_get_lineage_filters_by_relationship_type(app):
     assert len(all_types["edges"]) == 1
 
 
+OLD_PERSONS_DDL = """
+CREATE TABLE persons (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_en TEXT,
+    aliases_json TEXT NOT NULL DEFAULT '[]',
+    institution TEXT,
+    field TEXT,
+    homepage_url TEXT NOT NULL UNIQUE,
+    homepage_title TEXT,
+    public INTEGER NOT NULL DEFAULT 0,
+    notes_private TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
+OLD_MENTORSHIPS_DDL = """
+CREATE TABLE mentorships (
+    id TEXT PRIMARY KEY,
+    mentor_id TEXT NOT NULL,
+    student_id TEXT NOT NULL,
+    relationship_type TEXT NOT NULL
+        CHECK (relationship_type IN ('phd', 'master', 'postdoc', 'informal', 'other')),
+    start_year INTEGER,
+    end_year INTEGER,
+    institution TEXT,
+    evidence_url TEXT NOT NULL,
+    evidence_text TEXT,
+    confidence TEXT NOT NULL DEFAULT 'confirmed',
+    status TEXT NOT NULL DEFAULT 'draft',
+    public INTEGER NOT NULL DEFAULT 0,
+    notes_private TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    student_placement TEXT,
+    UNIQUE (mentor_id, student_id, relationship_type),
+    CHECK (mentor_id <> student_id)
+);
+"""
+
+
+def test_migration_rebuilds_type_check_and_preserves_data(tmp_path):
+    """旧库（旧类型 CHECK + student_placement 在末尾）迁移后保留数据且支持 undergrad。"""
+    import sqlite3
+
+    from app import create_app
+
+    db_path = tmp_path / "old.sqlite"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(OLD_PERSONS_DDL + OLD_MENTORSHIPS_DDL)
+    conn.execute(
+        "INSERT INTO persons (id, name, aliases_json, homepage_url, created_at, updated_at)"
+        " VALUES ('m1', '旧导师', '[]', 'https://example.edu/old-m', '2020-01-01T00:00:00', '2020-01-01T00:00:00')"
+    )
+    conn.execute(
+        "INSERT INTO persons (id, name, aliases_json, homepage_url, created_at, updated_at)"
+        " VALUES ('s1', '旧学生', '[]', 'https://example.edu/old-s', '2020-01-01T00:00:00', '2020-01-01T00:00:00')"
+    )
+    conn.execute(
+        "INSERT INTO mentorships (id, mentor_id, student_id, relationship_type, evidence_url,"
+        " created_at, updated_at) VALUES ('r1', 'm1', 's1', 'phd', 'https://example.edu/old-s',"
+        " '2020-01-01T00:00:00', '2020-01-01T00:00:00')"
+    )
+    conn.commit()
+    conn.close()
+
+    app = create_app({"TESTING": True, "DATABASE": str(db_path)})
+    with app.app_context():
+        rows = list_mentorships()
+        assert len(rows) == 1
+        assert rows[0]["relationship_type"] == "phd"
+        assert rows[0]["student_name"] == "旧学生"
+
+        mentor, _ = find_or_create_person({"name": "UG导师", "homepage_url": "https://example.edu/ugm"})
+        student, _ = find_or_create_person({"name": "UG学生", "homepage_url": "https://example.edu/ugs"})
+        created = create_mentorship({
+            "mentor_id": mentor["id"], "student_id": student["id"],
+            "relationship_type": "undergrad", "evidence_url": "https://example.edu/ugs",
+        })
+        assert created["relationship_type"] == "undergrad"
+        assert len(list_mentorships()) == 2
+
+
+def test_undergrad_type_works_in_lineage_and_filter_options(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "本科导师", "homepage_url": "https://example.edu/ugm"})
+        student, _ = find_or_create_person({"name": "本科学生", "homepage_url": "https://example.edu/ugs"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"],
+                           "relationship_type": "undergrad", "evidence_url": "https://example.edu/ugs",
+                           "start_year": 2015, "end_year": 2019})
+        lineage = get_lineage(student["id"], 3, 2, relationship_type="undergrad")
+        options = get_filter_options()
+    assert len(lineage["edges"]) == 1
+    assert lineage["edges"][0]["relationship_type"] == "undergrad"
+    assert "undergrad" in options["relationship_types"]
+
+
 def test_update_mentorship_changes_only_allowed_fields(app):
     with app.app_context():
         mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})

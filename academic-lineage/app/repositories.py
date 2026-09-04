@@ -8,11 +8,12 @@ from urllib.parse import urlsplit, urlunsplit
 from .config import MAX_LINEAGE_DEPTH, MAX_URL_LENGTH, MIN_YEAR
 from .db import get_db
 
-RELATIONSHIP_TYPES = {"phd", "master", "postdoc", "informal", "other"}
+RELATIONSHIP_TYPES = {"undergrad", "phd", "master", "postdoc", "informal", "other"}
 CONFIDENCE_LEVELS = {"confirmed", "probable", "uncertain"}
 MENTORSHIP_STATUSES = {"draft", "verified", "rejected"}
 
 RELATIONSHIP_LABELS_ZH = {
+    "undergrad": "本科导师",
     "phd": "博士导师",
     "master": "硕士导师",
     "postdoc": "博士后合作导师",

@@ -78,7 +78,7 @@ GitHub Pages 静态谱系网站
 | `id` | TEXT | UUID，主键 |
 | `mentor_id` | TEXT | 外键 → `persons.id` |
 | `student_id` | TEXT | 外键 → `persons.id` |
-| `relationship_type` | TEXT | `phd`、`master`、`postdoc`、`informal`、`other` |
+| `relationship_type` | TEXT | `undergrad`、`phd`、`master`、`postdoc`、`informal`、`other` |
 | `start_year` | INTEGER | 可空，1900–当前年份+1 |
 | `end_year` | INTEGER | 可空，不能早于 `start_year` |
 | `institution` | TEXT | 可空 |

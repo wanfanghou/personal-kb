@@ -20,8 +20,7 @@ CREATE TABLE IF NOT EXISTS mentorships (
     id TEXT PRIMARY KEY,
     mentor_id TEXT NOT NULL REFERENCES persons(id),
     student_id TEXT NOT NULL REFERENCES persons(id),
-    relationship_type TEXT NOT NULL
-        CHECK (relationship_type IN ('phd', 'master', 'postdoc', 'informal', 'other')),
+    relationship_type TEXT NOT NULL,
     start_year INTEGER,
     end_year INTEGER,
     institution TEXT,

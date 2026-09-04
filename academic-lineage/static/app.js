@@ -23,11 +23,12 @@ let editingMode = null; // null | 'person' | 'relationship'
 const REL_TYPE_ZH = {
   phd: '博士导师',
   master: '硕士导师',
+  undergrad: '本科导师',
   postdoc: '博士后合作导师',
   informal: '非正式指导',
   other: '其他',
 };
-const REL_TYPE_SHORT = { phd: '博士', master: '硕士', postdoc: '博后', informal: '非正式', other: '其他' };
+const REL_TYPE_SHORT = { phd: '博士', master: '硕士', undergrad: '本科', postdoc: '博后', informal: '非正式', other: '其他' };
 const STATUS_ZH = { draft: '草稿', verified: '已确认', rejected: '已拒绝' };
 const CONFIDENCE_ZH = { confirmed: 'confirmed 已确认', probable: 'probable 很可能', uncertain: 'uncertain 不确定' };
 
