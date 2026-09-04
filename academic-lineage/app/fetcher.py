@@ -1,13 +1,41 @@
 """Safe fetching of academic homepage metadata for user-submitted URLs."""
 import re
+import ssl
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
+
+try:
+    import certifi
+
+    _CA_BUNDLE = certifi.where()
+except ImportError:  # pragma: no cover
+    _CA_BUNDLE = None
 
 from .config import FETCH_MAX_BYTES, FETCH_MAX_REDIRECTS, FETCH_TIMEOUT_SECONDS
 from .repositories import normalize_homepage_url
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (compatible; AcademicLineage/1.0; local research tool)"
+
+
+def _default_ssl_context():
+    """Build an SSL context that prefers a bundled CA bundle.
+
+    Some Windows machines carry malformed certificates in the system
+    store, which makes ssl.create_default_context() fail with
+    "[ASN1: NOT_ENOUGH_DATA] not enough data". Loading the CA bundle
+    from certifi avoids reading the Windows store entirely.
+    """
+    if _CA_BUNDLE:
+        return ssl.create_default_context(cafile=_CA_BUNDLE)
+    return ssl.create_default_context()
+
+
+def _build_default_opener():
+    return urllib.request.build_opener(
+        _LimitedRedirectHandler(),
+        urllib.request.HTTPSHandler(context=_default_ssl_context()),
+    )
 
 _SEPARATORS = re.compile(r"\s*[|·•—–,;:]+\s*")
 _SPACED_DASH = re.compile(r"\s+[-–]\s+")
@@ -121,7 +149,7 @@ def preview_person_url(url: str, opener=None) -> dict:
     }
     try:
         if opener is None:
-            opener = urllib.request.build_opener(_LimitedRedirectHandler())
+            opener = _build_default_opener()
         request = urllib.request.Request(
             normalized_url,
             headers={

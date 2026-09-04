@@ -1,8 +1,20 @@
+import ssl
 import urllib.error
 
 import pytest
 
-from app.fetcher import parse_html_metadata, preview_person_url, validate_url
+from app.fetcher import (
+    _default_ssl_context,
+    parse_html_metadata,
+    preview_person_url,
+    validate_url,
+)
+
+
+def test_default_ssl_context_verifies_certs():
+    context = _default_ssl_context()
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED
 
 
 def test_metadata_prefers_og_title_and_author():
