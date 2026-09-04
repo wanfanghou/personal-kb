@@ -69,6 +69,19 @@ def _year(payload, key):
         raise ValidationError(f"{key} must be an integer year")
 
 
+def _string_list(payload, key, max_items=50):
+    value = payload.get(key)
+    if value is None:
+        return None
+    if isinstance(value, str):
+        items = [item.strip() for item in value.replace("，", ",").split(",") if item.strip()]
+    elif isinstance(value, list) and all(isinstance(item, str) for item in value):
+        items = [item.strip() for item in value if item.strip()]
+    else:
+        raise ValidationError(f"{key} must be a list of strings")
+    return items[:max_items]
+
+
 def preview_person_service(payload: dict) -> dict:
     url = (payload or {}).get("url")
     if not url or not isinstance(url, str) or not url.strip():
@@ -88,16 +101,53 @@ def create_person_service(payload: dict) -> tuple[dict, bool]:
         "name_en": _optional_str(payload, "name_en"),
         "institution": _optional_str(payload, "institution"),
         "field": _optional_str(payload, "field"),
+        "title": _optional_str(payload, "title"),
         "homepage_title": _optional_str(payload, "homepage_title"),
         "notes_private": payload.get("notes_private") or None,
         "public": _bool(payload, "public", False),
     }
-    aliases = payload.get("aliases")
+    aliases = _string_list(payload, "aliases", max_items=20)
     if aliases is not None:
-        if not isinstance(aliases, list) or not all(isinstance(a, str) for a in aliases):
-            raise ValidationError("aliases must be a list of strings")
-        data["aliases"] = [a.strip() for a in aliases if a.strip()][:20]
+        data["aliases"] = aliases
+    editorial_roles = _string_list(payload, "editorial_roles")
+    if editorial_roles is not None:
+        data["editorial_roles"] = editorial_roles
+    honors = _string_list(payload, "honors")
+    if honors is not None:
+        data["honors"] = honors
     return repositories.find_or_create_person(data)
+
+
+PERSON_UPDATE_ALLOWED = {
+    "name", "name_en", "aliases", "institution", "field", "title",
+    "editorial_roles", "honors", "public", "notes_private", "homepage_title",
+}
+
+
+def update_person_service(person_id: str, payload: dict) -> dict:
+    unknown = set(payload) - PERSON_UPDATE_ALLOWED - {"id"}
+    if unknown:
+        raise ValidationError(f"fields not allowed: {', '.join(sorted(unknown))}")
+
+    fields: dict = {}
+    if "name" in payload:
+        fields["name"] = _require_str(payload, "name")
+    for key in ("name_en", "institution", "field", "title", "notes_private", "homepage_title"):
+        if key in payload:
+            fields[key] = payload.get(key)
+    for key in ("aliases", "editorial_roles", "honors"):
+        if key in payload:
+            fields[key] = _string_list(payload, key, max_items=20 if key == "aliases" else 50) or []
+    if "public" in payload:
+        fields["public"] = _bool(payload, "public")
+
+    try:
+        result = repositories.update_person(person_id, fields)
+    except ValueError as error:
+        raise ValidationError(str(error)) from error
+    if result is None:
+        raise NotFoundError("person not found")
+    return result
 
 
 def _resolve_person_id(payload, id_key, url_key):
@@ -137,6 +187,7 @@ def create_mentorship_service(payload: dict) -> dict:
         "evidence_url": _require_str(payload, "evidence_url"),
         "evidence_text": _optional_str(payload, "evidence_text"),
         "institution": _optional_str(payload, "institution"),
+        "student_placement": _optional_str(payload, "student_placement"),
         "public": _bool(payload, "public", False),
         "notes_private": payload.get("notes_private") or None,
         "start_year": _year(payload, "start_year"),
@@ -169,7 +220,7 @@ def lineage_service(person_id: str, up="3", down="2") -> dict:
 
 _UPDATE_ALLOWED = {
     "status", "confidence", "start_year", "end_year", "institution",
-    "evidence_url", "evidence_text", "public", "notes_private",
+    "student_placement", "evidence_url", "evidence_text", "public", "notes_private",
 }
 
 
@@ -196,7 +247,7 @@ def update_mentorship_service(mentorship_id: str, payload: dict) -> dict:
         fields["evidence_url"] = evidence_url
     if "public" in payload:
         fields["public"] = _bool(payload, "public")
-    for key in ("evidence_text", "institution", "notes_private"):
+    for key in ("evidence_text", "institution", "student_placement", "notes_private"):
         if key in payload:
             fields[key] = payload.get(key)
     if "start_year" in payload:

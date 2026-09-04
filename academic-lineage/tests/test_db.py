@@ -7,6 +7,7 @@ from app.repositories import (
     get_lineage,
     normalize_homepage_url,
     update_mentorship,
+    update_person,
 )
 
 
@@ -148,3 +149,27 @@ def test_search_matches_institution_and_alias(app):
         results = find_persons("Example")
         assert any(p["name"] == "张三" for p in results)
         assert any(p["name"] == "张三" for p in find_persons("San Zhang"))
+
+
+def test_update_person_round_trip(app):
+    with app.app_context():
+        person, _ = find_or_create_person({"name": "张三", "homepage_url": "https://example.edu/zhang"})
+        updated = update_person(person["id"], {
+            "name": "张三丰",
+            "title": "教授",
+            "editorial_roles": ["管理世界, 编委"],
+            "honors": ["国家杰青"],
+            "public": True,
+        })
+    assert updated["name"] == "张三丰"
+    assert updated["title"] == "教授"
+    assert updated["editorial_roles"] == ["管理世界, 编委"]
+    assert updated["honors"] == ["国家杰青"]
+    assert updated["public"] is True
+
+
+def test_update_person_requires_name_if_provided(app):
+    with app.app_context():
+        person, _ = find_or_create_person({"name": "X", "homepage_url": "https://example.edu/x"})
+        with pytest.raises(ValueError, match="name is required"):
+            update_person(person["id"], {"name": "   "})

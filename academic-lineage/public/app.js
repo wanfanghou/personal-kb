@@ -272,8 +272,13 @@ function showPersonDetails(person) {
     <dl class="detail-list">
       <dt>姓名</dt><dd>${escapeHtml(person.name)}</dd>
       ${person.name_en ? `<dt>英文名</dt><dd>${escapeHtml(person.name_en)}</dd>` : ''}
+      ${person.title ? `<dt>职称/头衔</dt><dd>${escapeHtml(person.title)}</dd>` : ''}
       ${person.institution ? `<dt>机构</dt><dd>${escapeHtml(person.institution)}</dd>` : ''}
       ${person.field ? `<dt>研究方向</dt><dd>${escapeHtml(person.field)}</dd>` : ''}
+      ${person.editorial_roles && person.editorial_roles.length
+        ? `<dt>编委会任职</dt><dd>${escapeHtml(person.editorial_roles.join('、'))}</dd>` : ''}
+      ${person.honors && person.honors.length
+        ? `<dt>荣誉 / 人才称号</dt><dd>${escapeHtml(person.honors.join('、'))}</dd>` : ''}
       ${person.aliases && person.aliases.length
         ? `<dt>别名</dt><dd>${escapeHtml(person.aliases.join('、'))}</dd>` : ''}
       <dt>主页</dt><dd><a href="${escapeHtml(person.homepage_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(person.homepage_url)}</a></dd>
@@ -298,6 +303,7 @@ function showRelationshipDetails(rel) {
       <dt>类型</dt><dd>${REL_TYPE_ZH[rel.relationship_type] || rel.relationship_type}</dd>
       <dt>年份</dt><dd>${years || '未填写'}</dd>
       ${rel.institution ? `<dt>机构</dt><dd>${escapeHtml(rel.institution)}</dd>` : ''}
+      ${rel.student_placement ? `<dt>学生毕业去向</dt><dd>${escapeHtml(rel.student_placement)}</dd>` : ''}
       <dt>可信度</dt><dd>${escapeHtml(rel.confidence)}</dd>
       <dt>证据</dt><dd><a href="${escapeHtml(rel.evidence_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(rel.evidence_url)}</a></dd>
       ${rel.evidence_text ? `<dt>证据说明</dt><dd>${escapeHtml(rel.evidence_text)}</dd>` : ''}

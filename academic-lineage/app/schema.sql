@@ -5,6 +5,9 @@ CREATE TABLE IF NOT EXISTS persons (
     aliases_json TEXT NOT NULL DEFAULT '[]',
     institution TEXT,
     field TEXT,
+    title TEXT,
+    editorial_roles_json TEXT NOT NULL DEFAULT '[]',
+    honors_json TEXT NOT NULL DEFAULT '[]',
     homepage_url TEXT NOT NULL UNIQUE,
     homepage_title TEXT,
     public INTEGER NOT NULL DEFAULT 0,
@@ -22,6 +25,7 @@ CREATE TABLE IF NOT EXISTS mentorships (
     start_year INTEGER,
     end_year INTEGER,
     institution TEXT,
+    student_placement TEXT,
     evidence_url TEXT NOT NULL,
     evidence_text TEXT,
     confidence TEXT NOT NULL DEFAULT 'confirmed'

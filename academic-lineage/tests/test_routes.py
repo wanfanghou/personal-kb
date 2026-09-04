@@ -158,3 +158,62 @@ def test_preview_person_rejects_unsafe_url(app):
 def test_unknown_person_lineage_returns_404(app):
     response = app.test_client().get("/api/persons/does-not-exist/lineage")
     assert response.status_code == 404
+
+
+def test_create_person_stores_title_editorial_and_honors(app):
+    client = app.test_client()
+    response = client.post("/api/persons", json={
+        "name": "张三",
+        "homepage_url": "https://example.edu/zhang",
+        "title": "教授",
+        "editorial_roles": ["Journal of Finance, 编委", "Management Science, 副主编"],
+        "honors": ["国家杰出青年科学基金（杰青）"],
+    })
+    assert response.status_code == 201
+    person = response.get_json()["person"]
+    assert person["title"] == "教授"
+    assert person["editorial_roles"] == ["Journal of Finance, 编委", "Management Science, 副主编"]
+    assert person["honors"] == ["国家杰出青年科学基金（杰青）"]
+
+
+def test_patch_person_updates_identity_fields(app):
+    client = app.test_client()
+    created = client.post("/api/persons", json={
+        "name": "Old Name", "homepage_url": "https://example.edu/x",
+    }).get_json()["person"]
+    response = client.patch(f"/api/persons/{created['id']}", json={
+        "name": "New Name",
+        "title": "Associate Professor",
+        "editorial_roles": ["Review of Finance, Editorial Board"],
+        "honors": ["长江学者"],
+        "public": True,
+    })
+    assert response.status_code == 200
+    person = response.get_json()["person"]
+    assert person["name"] == "New Name"
+    assert person["title"] == "Associate Professor"
+    assert person["editorial_roles"] == ["Review of Finance, Editorial Board"]
+    assert person["honors"] == ["长江学者"]
+    assert person["public"] is True
+
+
+def test_patch_person_rejects_homepage_change(app):
+    client = app.test_client()
+    created = client.post("/api/persons", json={
+        "name": "X", "homepage_url": "https://example.edu/x",
+    }).get_json()["person"]
+    response = client.patch(f"/api/persons/{created['id']}", json={"homepage_url": "https://example.edu/y"})
+    assert response.status_code == 400
+
+
+def test_mentorship_stores_student_placement(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={"name": "M", "homepage_url": "https://example.edu/m"}).get_json()
+    student = client.post("/api/persons", json={"name": "S", "homepage_url": "https://example.edu/s"}).get_json()
+    response = client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": student["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s",
+        "student_placement": "Assistant Professor, NUS",
+    })
+    assert response.status_code == 201
+    assert response.get_json()["mentorship"]["student_placement"] == "Assistant Professor, NUS"

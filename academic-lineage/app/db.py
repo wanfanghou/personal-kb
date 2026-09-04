@@ -28,7 +28,25 @@ def init_db(app) -> None:
     with app.app_context():
         db = get_db()
         db.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _migrate_schema(db)
         db.commit()
+
+
+def _migrate_schema(db: sqlite3.Connection) -> None:
+    """Add columns that were introduced after the initial schema release."""
+    person_columns = {row["name"] for row in db.execute("PRAGMA table_info(persons)")}
+    person_additions = {
+        "title": "TEXT",
+        "editorial_roles_json": "TEXT NOT NULL DEFAULT '[]'",
+        "honors_json": "TEXT NOT NULL DEFAULT '[]'",
+    }
+    for column, definition in person_additions.items():
+        if column not in person_columns:
+            db.execute(f"ALTER TABLE persons ADD COLUMN {column} {definition}")
+
+    mentorship_columns = {row["name"] for row in db.execute("PRAGMA table_info(mentorships)")}
+    if "student_placement" not in mentorship_columns:
+        db.execute("ALTER TABLE mentorships ADD COLUMN student_placement TEXT")
 
 
 def init_app(app) -> None:

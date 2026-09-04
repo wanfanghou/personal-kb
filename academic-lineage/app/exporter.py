@@ -25,6 +25,9 @@ def export_public_data(connection, output_dir) -> dict:
             "aliases": json.loads(row["aliases_json"] or "[]"),
             "institution": row["institution"],
             "field": row["field"],
+            "title": row["title"],
+            "editorial_roles": json.loads(row["editorial_roles_json"] or "[]"),
+            "honors": json.loads(row["honors_json"] or "[]"),
             "homepage_url": row["homepage_url"],
         })
     public_ids = {person["id"] for person in people}
@@ -44,6 +47,7 @@ def export_public_data(connection, output_dir) -> dict:
             "start_year": row["start_year"],
             "end_year": row["end_year"],
             "institution": row["institution"],
+            "student_placement": row["student_placement"],
             "evidence_url": row["evidence_url"],
             "evidence_text": row["evidence_text"],
             "confidence": row["confidence"],
@@ -59,7 +63,7 @@ def export_public_data(connection, output_dir) -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "people_count": len(people),
         "relationship_count": len(relationships),
-        "schema_version": 1,
+        "schema_version": 2,
     }
     (output_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"

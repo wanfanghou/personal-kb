@@ -59,6 +59,9 @@ GitHub Pages 静态谱系网站
 | `aliases_json` | TEXT | JSON 字符串数组 |
 | `institution` | TEXT | 可空 |
 | `field` | TEXT | 可空 |
+| `title` | TEXT | 可空，当前职称/头衔（如 Professor、教授） |
+| `editorial_roles_json` | TEXT | JSON 字符串数组，编委会任职 |
+| `honors_json` | TEXT | JSON 字符串数组，荣誉/人才称号（如国家杰青） |
 | `homepage_url` | TEXT | 必填，规范化 URL |
 | `homepage_title` | TEXT | 可空，来自抓取预览 |
 | `public` | INTEGER | 0/1，默认 0 |
@@ -79,6 +82,7 @@ GitHub Pages 静态谱系网站
 | `start_year` | INTEGER | 可空，1900–当前年份+1 |
 | `end_year` | INTEGER | 可空，不能早于 `start_year` |
 | `institution` | TEXT | 可空 |
+| `student_placement` | TEXT | 可空，学生毕业去向（机构+职位） |
 | `evidence_url` | TEXT | 必填，至少一个主页 URL |
 | `evidence_text` | TEXT | 可空 |
 | `confidence` | TEXT | `confirmed`、`probable`、`uncertain` |

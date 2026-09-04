@@ -83,7 +83,7 @@ body {
 
 label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
 
-input[type="text"], input[type="url"], input[type="search"], input[type="number"], select {
+input[type="text"], input[type="url"], input[type="search"], input[type="number"], select, textarea {
   width: 100%;
   padding: 7px 9px;
   border: 1px solid var(--border);
@@ -91,6 +91,7 @@ input[type="text"], input[type="url"], input[type="search"], input[type="number"
   font-size: 13px;
   color: var(--text);
   background: #fff;
+  font-family: inherit;
 }
 
 input:focus, select:focus { outline: 2px solid #bfdbfe; border-color: var(--primary); }
@@ -186,6 +187,9 @@ input:focus, select:focus { outline: 2px solid #bfdbfe; border-color: var(--prim
 .detail-list a { color: var(--primary); }
 .detail-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
 .detail-actions .btn { flex: 1 1 auto; }
+
+.edit-form label { margin-top: 8px; }
+.edit-form textarea { resize: vertical; }
 
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; overflow-y: auto; }

@@ -76,6 +76,8 @@ def _person_to_dict(row: sqlite3.Row) -> dict:
     data = dict(row)
     data["public"] = bool(data["public"])
     data["aliases"] = json.loads(data.pop("aliases_json") or "[]")
+    data["editorial_roles"] = json.loads(data.pop("editorial_roles_json") or "[]")
+    data["honors"] = json.loads(data.pop("honors_json") or "[]")
     return data
 
 
@@ -111,9 +113,10 @@ def find_or_create_person(data: dict) -> tuple[dict, bool]:
     db.execute(
         """
         INSERT INTO persons
-            (id, name, name_en, aliases_json, institution, field,
+            (id, name, name_en, aliases_json, institution, field, title,
+             editorial_roles_json, honors_json,
              homepage_url, homepage_title, public, notes_private, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             person_id,
@@ -122,6 +125,9 @@ def find_or_create_person(data: dict) -> tuple[dict, bool]:
             json.dumps(data.get("aliases") or [], ensure_ascii=False),
             data.get("institution") or None,
             data.get("field") or None,
+            data.get("title") or None,
+            json.dumps(data.get("editorial_roles") or [], ensure_ascii=False),
+            json.dumps(data.get("honors") or [], ensure_ascii=False),
             homepage_url,
             data.get("homepage_title") or None,
             1 if data.get("public") else 0,
@@ -209,9 +215,9 @@ def create_mentorship(data: dict) -> dict:
         """
         INSERT INTO mentorships
             (id, mentor_id, student_id, relationship_type, start_year, end_year,
-             institution, evidence_url, evidence_text, confidence, status, public,
+             institution, student_placement, evidence_url, evidence_text, confidence, status, public,
              notes_private, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             mentorship_id,
@@ -221,6 +227,7 @@ def create_mentorship(data: dict) -> dict:
             data.get("start_year") or None,
             data.get("end_year") or None,
             data.get("institution") or None,
+            data.get("student_placement") or None,
             evidence_url,
             data.get("evidence_text") or None,
             confidence,
@@ -237,7 +244,7 @@ def create_mentorship(data: dict) -> dict:
 
 UPDATABLE_FIELDS = {
     "status", "confidence", "start_year", "end_year", "institution",
-    "evidence_url", "evidence_text", "public", "notes_private",
+    "student_placement", "evidence_url", "evidence_text", "public", "notes_private",
 }
 
 
@@ -261,7 +268,7 @@ def update_mentorship(mentorship_id: str, fields: dict) -> dict | None:
         if not evidence_url:
             raise ValueError("evidence_url is required")
         updates["evidence_url"] = evidence_url
-    for key in ("evidence_text", "institution", "notes_private"):
+    for key in ("evidence_text", "institution", "student_placement", "notes_private"):
         if key in fields:
             updates[key] = fields[key] or None
     if "public" in fields:
@@ -290,6 +297,48 @@ def update_mentorship(mentorship_id: str, fields: dict) -> dict | None:
     db.execute(f"UPDATE mentorships SET {set_clause} WHERE id = ?", params)
     db.commit()
     return get_mentorship(mentorship_id)
+
+
+PERSON_UPDATABLE_FIELDS = {
+    "name", "name_en", "aliases", "institution", "field", "title",
+    "editorial_roles", "honors", "public", "notes_private", "homepage_title",
+}
+
+
+def update_person(person_id: str, fields: dict) -> dict | None:
+    db = get_db()
+    current = db.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+    if current is None:
+        return None
+
+    updates: dict = {}
+    for key in ("name_en", "institution", "field", "title", "notes_private", "homepage_title"):
+        if key in fields:
+            updates[key] = fields[key] or None
+    if "name" in fields:
+        name = (fields["name"] or "").strip()
+        if not name:
+            raise ValueError("name is required")
+        updates["name"] = name
+    for key, column in (
+        ("aliases", "aliases_json"),
+        ("editorial_roles", "editorial_roles_json"),
+        ("honors", "honors_json"),
+    ):
+        if key in fields:
+            updates[column] = json.dumps(fields[key] or [], ensure_ascii=False)
+    if "public" in fields:
+        updates["public"] = 1 if fields["public"] else 0
+
+    if not updates:
+        return get_person(person_id)
+
+    updates["updated_at"] = now_iso()
+    set_clause = ", ".join(f"{key} = ?" for key in updates)
+    params = list(updates.values()) + [person_id]
+    db.execute(f"UPDATE persons SET {set_clause} WHERE id = ?", params)
+    db.commit()
+    return get_person(person_id)
 
 
 def get_lineage(person_id: str, up: int, down: int) -> dict:

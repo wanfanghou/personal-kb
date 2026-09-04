@@ -67,6 +67,8 @@ function renderIdentityCard(role, preview) {
     <input class="name-input" id="${role}-name" type="text"
            value="${escapeHtml(preview.candidate_name)}"
            placeholder="姓名（可手动修改）">
+    <input class="title-input" id="${role}-title" type="text"
+           placeholder="${role === 'mentor' ? '导师职称（如 Professor）' : '学生当前职称（如 Assistant Professor）'}">
     <div class="identity-url">${escapeHtml(preview.normalized_url)}</div>
     ${ok && preview.title ? `<div class="identity-title">标题：${escapeHtml(preview.title)}</div>` : ''}
     ${!ok ? `<div class="identity-error">${escapeHtml(preview.fetch_error)}</div>` : ''}
@@ -113,6 +115,11 @@ function currentName(role) {
   return preview ? (preview.candidate_name || '').trim() : '';
 }
 
+function currentTitle(role) {
+  const input = $(`${role}-title`);
+  return input ? input.value.trim() : '';
+}
+
 function updateSentence() {
   const mentorName = currentName('mentor');
   const studentName = currentName('student');
@@ -148,11 +155,13 @@ async function confirmEntry() {
   const startYear = $('start-year').value;
   const endYear = $('end-year').value;
   const institution = $('rel-institution').value.trim();
+  const studentPlacement = $('student-placement').value.trim();
   const evidenceText = $('evidence-text').value.trim();
   const notesPrivate = $('notes-private').value.trim();
   if (startYear) payload.start_year = parseInt(startYear, 10);
   if (endYear) payload.end_year = parseInt(endYear, 10);
   if (institution) payload.institution = institution;
+  if (studentPlacement) payload.student_placement = studentPlacement;
   if (evidenceText) payload.evidence_text = evidenceText;
   if (notesPrivate) payload.notes_private = notesPrivate;
 
@@ -164,6 +173,7 @@ async function confirmEntry() {
       method: 'POST',
       body: JSON.stringify({
         name: mentorName,
+        title: currentTitle('mentor') || null,
         homepage_url: state.previews.mentor.normalized_url,
         homepage_title: state.previews.mentor.title || null,
         public: publicFlag,
@@ -173,6 +183,7 @@ async function confirmEntry() {
       method: 'POST',
       body: JSON.stringify({
         name: studentName,
+        title: currentTitle('student') || null,
         homepage_url: state.previews.student.normalized_url,
         homepage_title: state.previews.student.title || null,
         public: publicFlag,
@@ -205,7 +216,7 @@ function clearEntryForm() {
     $(`${role}-card`).hidden = true;
     state.previews[role] = null;
   });
-  ['start-year', 'end-year', 'rel-institution', 'evidence-url', 'evidence-text', 'notes-private'].forEach(
+  ['start-year', 'end-year', 'rel-institution', 'student-placement', 'evidence-url', 'evidence-text', 'notes-private'].forEach(
     (id) => { $(id).value = ''; }
   );
   $('confirmation-sentence').hidden = true;
@@ -382,14 +393,22 @@ function expandDown() {
 
 /* ---------- 详情面板 ---------- */
 
+let detailPerson = null;
+
 function renderPersonDetails(person) {
+  detailPerson = person;
   $('detail-title').textContent = `学者：${person.name}`;
   $('detail-content').innerHTML = `
     <dl class="detail-list">
       <dt>姓名</dt><dd>${escapeHtml(person.name)}</dd>
       ${person.name_en ? `<dt>英文名</dt><dd>${escapeHtml(person.name_en)}</dd>` : ''}
+      ${person.title ? `<dt>职称/头衔</dt><dd>${escapeHtml(person.title)}</dd>` : ''}
       ${person.institution ? `<dt>机构</dt><dd>${escapeHtml(person.institution)}</dd>` : ''}
       ${person.field ? `<dt>研究方向</dt><dd>${escapeHtml(person.field)}</dd>` : ''}
+      ${person.editorial_roles && person.editorial_roles.length
+        ? `<dt>编委会任职</dt><dd>${escapeHtml(person.editorial_roles.join('、'))}</dd>` : ''}
+      ${person.honors && person.honors.length
+        ? `<dt>荣誉 / 人才称号</dt><dd>${escapeHtml(person.honors.join('、'))}</dd>` : ''}
       ${person.aliases && person.aliases.length
         ? `<dt>别名</dt><dd>${escapeHtml(person.aliases.join('、'))}</dd>` : ''}
       <dt>主页</dt><dd><a href="${escapeHtml(person.homepage_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(person.homepage_url)}</a></dd>
@@ -397,11 +416,62 @@ function renderPersonDetails(person) {
       ${person.notes_private ? `<dt>私有备注</dt><dd>${escapeHtml(person.notes_private)}</dd>` : ''}
     </dl>
     <div class="detail-actions">
+      <button class="btn btn-small" data-action="edit-person">编辑学者信息</button>
       <button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
       <button class="btn btn-small" data-action="expand-down">↓ 向下展开一代</button>
       <button class="btn btn-small" data-action="reset-view">重置视图</button>
     </div>
   `;
+}
+
+function renderPersonEditForm(person) {
+  $('detail-title').textContent = `编辑：${person.name}`;
+  $('detail-content').innerHTML = `
+    <div class="edit-form">
+      <label>姓名 <input id="edit-name" type="text" value="${escapeHtml(person.name)}"></label>
+      <label>英文名 <input id="edit-name-en" type="text" value="${escapeHtml(person.name_en)}"></label>
+      <label>职称/头衔 <input id="edit-title" type="text" value="${escapeHtml(person.title)}" placeholder="如：Professor / 教授"></label>
+      <label>机构 <input id="edit-institution" type="text" value="${escapeHtml(person.institution)}"></label>
+      <label>研究方向 <input id="edit-field" type="text" value="${escapeHtml(person.field)}"></label>
+      <label>别名（逗号分隔）<input id="edit-aliases" type="text" value="${escapeHtml((person.aliases || []).join(', '))}"></label>
+      <label>编委会任职（每行一个）<textarea id="edit-editorial" rows="3">${escapeHtml((person.editorial_roles || []).join('\n'))}</textarea></label>
+      <label>荣誉 / 人才称号（每行一个，如：国家杰青）<textarea id="edit-honors" rows="3">${escapeHtml((person.honors || []).join('\n'))}</textarea></label>
+      <label class="checkbox-row"><input id="edit-public" type="checkbox" ${person.public ? 'checked' : ''}> 公开（允许导出到公开站点）</label>
+      <label>私有备注 <input id="edit-notes" type="text" value="${escapeHtml(person.notes_private)}"></label>
+      <div class="detail-actions">
+        <button class="btn btn-primary btn-small" data-action="save-person">保存</button>
+        <button class="btn btn-small" data-action="cancel-edit">取消</button>
+      </div>
+    </div>
+  `;
+}
+
+function splitLines(id) {
+  return $(id).value.split('\n').map((s) => s.trim()).filter(Boolean);
+}
+
+async function savePersonEdit(personId) {
+  try {
+    const updated = await api(`/api/persons/${encodeURIComponent(personId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name: $('edit-name').value.trim(),
+        name_en: $('edit-name-en').value.trim(),
+        title: $('edit-title').value.trim(),
+        institution: $('edit-institution').value.trim(),
+        field: $('edit-field').value.trim(),
+        aliases: $('edit-aliases').value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
+        editorial_roles: splitLines('edit-editorial'),
+        honors: splitLines('edit-honors'),
+        public: $('edit-public').checked,
+        notes_private: $('edit-notes').value.trim(),
+      }),
+    });
+    renderPersonDetails(updated.person);
+    await loadLineage(personId, state.up, state.down);
+  } catch (error) {
+    $('detail-content').innerHTML = `<p class="status error">保存失败：${escapeHtml(error.message)}</p>`;
+  }
 }
 
 async function showNodeDetails(node) {
@@ -424,6 +494,7 @@ async function showEdgeDetails(edge) {
         <dt>类型</dt><dd>${REL_TYPE_ZH[m.relationship_type] || m.relationship_type}</dd>
         <dt>年份</dt><dd>${years || '未填写'}</dd>
         ${m.institution ? `<dt>机构</dt><dd>${escapeHtml(m.institution)}</dd>` : ''}
+        ${m.student_placement ? `<dt>学生毕业去向</dt><dd>${escapeHtml(m.student_placement)}</dd>` : ''}
         <dt>状态</dt><dd>${STATUS_ZH[m.status] || m.status}</dd>
         <dt>可信度</dt><dd>${CONFIDENCE_ZH[m.confidence] || m.confidence}</dd>
         <dt>公开</dt><dd>${m.public ? '是' : '否（仅本地）'}</dd>
@@ -446,6 +517,9 @@ function bindDetailActions() {
     if (action === 'expand-up') expandUp();
     if (action === 'expand-down') expandDown();
     if (action === 'reset-view') ensureCy().fit(undefined, 45);
+    if (action === 'edit-person' && detailPerson) renderPersonEditForm(detailPerson);
+    if (action === 'save-person' && detailPerson) savePersonEdit(detailPerson.id);
+    if (action === 'cancel-edit' && detailPerson) renderPersonDetails(detailPerson);
   });
 }
 

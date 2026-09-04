@@ -58,6 +58,17 @@ def get_person(person_id):
     return jsonify({"person": person})
 
 
+@bp.patch("/persons/<person_id>")
+def update_person(person_id):
+    try:
+        person = services.update_person_service(person_id, _json_payload())
+    except services.NotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    except services.ValidationError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify({"person": person})
+
+
 @bp.get("/persons/<person_id>/lineage")
 def get_lineage(person_id):
     try:
