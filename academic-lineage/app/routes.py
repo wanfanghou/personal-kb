@@ -2,6 +2,7 @@
 from flask import Blueprint, jsonify, request
 
 from . import repositories, services
+from .db import get_db
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -18,6 +19,15 @@ def _json_payload():
 @bp.get("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+@bp.get("/stats")
+def stats():
+    db = get_db()
+    return jsonify({
+        "persons": db.execute("SELECT COUNT(*) AS c FROM persons").fetchone()["c"],
+        "mentorships": db.execute("SELECT COUNT(*) AS c FROM mentorships").fetchone()["c"],
+    })
 
 
 @bp.post("/preview-person")
@@ -41,12 +51,10 @@ def create_person():
 @bp.get("/persons")
 def list_persons():
     query = (request.args.get("q") or "").strip()
-    if not query:
-        return jsonify({"persons": []})
     try:
-        limit = int(request.args.get("limit", 50))
+        limit = int(request.args.get("limit", 100))
     except ValueError:
-        limit = 50
+        limit = 100
     return jsonify({"persons": repositories.find_persons(query, limit)})
 
 

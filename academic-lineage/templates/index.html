@@ -10,6 +10,7 @@
   <header class="topbar">
     <h1>学术谱系 · 本地管理</h1>
     <div class="topbar-actions">
+      <span id="db-stats" class="muted"></span>
       <button id="export-btn" class="btn btn-secondary" type="button">导出公开数据</button>
       <span id="export-status" class="muted"></span>
     </div>
@@ -21,6 +22,12 @@
         <h2>搜索学者</h2>
         <input id="search-input" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
         <ul id="search-results" class="result-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>已录入学者</h2>
+        <p class="muted hint">数据保存在本地 SQLite（data/network.sqlite），重启或关闭浏览器后仍在。</p>
+        <ul id="person-list" class="result-list"></ul>
       </div>
 
       <div class="card">

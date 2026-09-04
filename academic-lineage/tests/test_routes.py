@@ -160,6 +160,30 @@ def test_unknown_person_lineage_returns_404(app):
     assert response.status_code == 404
 
 
+def test_list_persons_without_query_returns_all(app):
+    client = app.test_client()
+    client.post("/api/persons", json={"name": "A", "homepage_url": "https://example.edu/a"})
+    client.post("/api/persons", json={"name": "B", "homepage_url": "https://example.edu/b"})
+    response = client.get("/api/persons")
+    assert response.status_code == 200
+    assert len(response.get_json()["persons"]) == 2
+
+
+def test_stats_endpoint_returns_counts(app):
+    client = app.test_client()
+    client.post("/api/persons", json={"name": "M", "homepage_url": "https://example.edu/m"})
+    client.post("/api/persons", json={"name": "S", "homepage_url": "https://example.edu/s"})
+    mentor = client.get("/api/persons?q=M").get_json()["persons"][0]
+    student = client.get("/api/persons?q=S").get_json()["persons"][0]
+    client.post("/api/mentorships", json={
+        "mentor_id": mentor["id"], "student_id": student["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s",
+    })
+    response = client.get("/api/stats")
+    assert response.status_code == 200
+    assert response.get_json() == {"persons": 2, "mentorships": 1}
+
+
 def test_create_person_stores_title_editorial_and_honors(app):
     client = app.test_client()
     response = client.post("/api/persons", json={

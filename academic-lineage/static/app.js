@@ -200,6 +200,8 @@ async function confirmEntry() {
     setEntryStatus(`已保存：学生 ${studentName} 是导师 ${mentorName} 的学生`);
     await loadLineage(student.person.id, 1, 0);
     clearEntryForm();
+    refreshStats();
+    refreshPersonList();
   } catch (error) {
     if (error.status === 409) {
       setEntryStatus(`关系已存在，未重复创建：${error.message}`, true);
@@ -267,6 +269,43 @@ function selectPerson(person) {
   state.up = 3;
   state.down = 2;
   loadLineage(person.id, state.up, state.down);
+}
+
+/* ---------- 数据库概览 ---------- */
+
+async function refreshStats() {
+  try {
+    const data = await api('/api/stats');
+    $('db-stats').textContent = `数据库：${data.persons} 位学者 / ${data.mentorships} 条关系`;
+  } catch (error) {
+    $('db-stats').textContent = '';
+  }
+}
+
+async function refreshPersonList() {
+  try {
+    const data = await api('/api/persons?limit=100');
+    const list = $('person-list');
+    list.innerHTML = '';
+    if (!data.persons.length) {
+      list.innerHTML = '<li class="muted">还没有录入的学者</li>';
+      return;
+    }
+    for (const person of data.persons) {
+      const item = document.createElement('li');
+      item.className = 'result-item';
+      item.innerHTML = `
+        <span class="result-name">${escapeHtml(person.name)}</span>
+        ${person.title ? `<span class="result-meta">${escapeHtml(person.title)}</span>` : ''}
+        ${person.public
+          ? '<span class="badge badge-pub">公开</span>'
+          : '<span class="badge badge-priv">私有</span>'}`;
+      item.addEventListener('click', () => selectPerson(person));
+      list.appendChild(item);
+    }
+  } catch (error) {
+    $('person-list').innerHTML = `<li class="status error">${escapeHtml(error.message)}</li>`;
+  }
 }
 
 /* ---------- 图谱 ---------- */
@@ -469,6 +508,7 @@ async function savePersonEdit(personId) {
     });
     renderPersonDetails(updated.person);
     await loadLineage(personId, state.up, state.down);
+    refreshPersonList();
   } catch (error) {
     $('detail-content').innerHTML = `<p class="status error">保存失败：${escapeHtml(error.message)}</p>`;
   }
@@ -552,6 +592,8 @@ function initApp() {
   $('export-btn').addEventListener('click', exportPublic);
   bindSearch();
   bindDetailActions();
+  refreshStats();
+  refreshPersonList();
 }
 
 if (typeof cytoscape === 'undefined') {

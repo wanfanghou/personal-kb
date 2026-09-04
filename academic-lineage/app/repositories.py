@@ -142,9 +142,13 @@ def find_or_create_person(data: dict) -> tuple[dict, bool]:
 
 def find_persons(query: str, limit: int = 50) -> list[dict]:
     query = (query or "").strip()
-    if not query:
-        return []
     db = get_db()
+    if not query:
+        rows = db.execute(
+            "SELECT * FROM persons ORDER BY updated_at DESC LIMIT ?",
+            (max(1, min(int(limit), 200)),),
+        ).fetchall()
+        return [_person_to_dict(row) for row in rows]
     pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
     rows = db.execute(
         """
