@@ -13,7 +13,11 @@ class ValidationError(ValueError):
 
 
 class DuplicateError(ValueError):
-    """Maps to HTTP 409."""
+    """Maps to HTTP 409; carries the existing record when available."""
+
+    def __init__(self, message, existing=None):
+        super().__init__(message)
+        self.existing = existing
 
 
 class NotFoundError(ValueError):
@@ -197,7 +201,8 @@ def create_mentorship_service(payload: dict) -> dict:
     try:
         return repositories.create_mentorship(data)
     except repositories.DuplicateMentorshipError as error:
-        raise DuplicateError(str(error)) from error
+        existing = repositories.find_mentorship(mentor_id, student_id, relationship_type)
+        raise DuplicateError(str(error), existing=existing) from error
     except KeyError as error:
         raise NotFoundError(str(error)) from error
 
@@ -267,3 +272,119 @@ def update_mentorship_service(mentorship_id: str, payload: dict) -> dict:
 def export_public_service() -> dict:
     output_dir = Path(current_app.config["PUBLIC_DATA_DIR"])
     return exporter.export_public_data(get_db(), output_dir)
+
+
+# ---------- 投稿审核 ----------
+
+def _validate_submission_payload(payload) -> dict:
+    if not isinstance(payload, dict):
+        raise ValidationError("payload must be a JSON object")
+    mentor = payload.get("mentor")
+    student = payload.get("student")
+    relationship = payload.get("relationship")
+    if not isinstance(mentor, dict) or not isinstance(student, dict) or not isinstance(relationship, dict):
+        raise ValidationError("mentor / student / relationship fields are required")
+
+    mentor_name = _require_str(mentor, "name")
+    mentor_url = _require_str(mentor, "homepage_url", max_len=2048)
+    student_name = _require_str(student, "name")
+    student_url = _require_str(student, "homepage_url", max_len=2048)
+    try:
+        mentor_url = repositories.normalize_homepage_url(mentor_url)
+        student_url = repositories.normalize_homepage_url(student_url)
+    except ValueError as error:
+        raise ValidationError(str(error)) from error
+    if mentor_url == student_url:
+        raise ValidationError("导师与学生的主页 URL 不能相同")
+
+    relationship_type = (relationship.get("relationship_type") or "phd").strip()
+    if relationship_type not in repositories.RELATIONSHIP_TYPES:
+        raise ValidationError(f"invalid relationship_type: {relationship_type}")
+    confidence = (relationship.get("confidence") or "confirmed").strip()
+    if confidence not in repositories.CONFIDENCE_LEVELS:
+        raise ValidationError(f"invalid confidence: {confidence}")
+
+    rel_data = {
+        "relationship_type": relationship_type,
+        "confidence": confidence,
+        "start_year": _year(relationship, "start_year"),
+        "end_year": _year(relationship, "end_year"),
+        "institution": _optional_str(relationship, "institution"),
+        "student_placement": _optional_str(relationship, "student_placement"),
+        "evidence_url": _require_str(relationship, "evidence_url", required=False) or student_url,
+        "evidence_text": _optional_str(relationship, "evidence_text"),
+    }
+    repositories.validate_years(rel_data)
+
+    return {
+        "mentor": {
+            "name": mentor_name,
+            "homepage_url": mentor_url,
+            "title": _optional_str(mentor, "title"),
+        },
+        "student": {
+            "name": student_name,
+            "homepage_url": student_url,
+            "title": _optional_str(student, "title"),
+        },
+        "relationship": rel_data,
+    }
+
+
+def create_submission_service(payload: dict, submitter_note: str | None = None) -> dict:
+    cleaned = _validate_submission_payload(payload)
+    note = (submitter_note or "").strip()[:1000] or None
+    return repositories.create_submission(cleaned, note)
+
+
+def approve_submission_service(submission_id: str) -> dict:
+    submission = repositories.get_submission(submission_id)
+    if submission is None:
+        raise NotFoundError("submission not found")
+    if submission["status"] != "pending":
+        raise ValidationError("只有待审核（pending）的投稿可以批准")
+
+    payload = _validate_submission_payload(submission["payload"])
+    try:
+        mentor, _ = repositories.find_or_create_person({
+            "name": payload["mentor"]["name"],
+            "homepage_url": payload["mentor"]["homepage_url"],
+            "title": payload["mentor"]["title"],
+            "public": False,
+        })
+        student, _ = repositories.find_or_create_person({
+            "name": payload["student"]["name"],
+            "homepage_url": payload["student"]["homepage_url"],
+            "title": payload["student"]["title"],
+            "public": False,
+        })
+        rel = payload["relationship"]
+        mentorship = repositories.create_mentorship({
+            "mentor_id": mentor["id"],
+            "student_id": student["id"],
+            "relationship_type": rel["relationship_type"],
+            "start_year": rel["start_year"],
+            "end_year": rel["end_year"],
+            "institution": rel["institution"],
+            "student_placement": rel["student_placement"],
+            "evidence_url": rel["evidence_url"],
+            "evidence_text": rel["evidence_text"],
+            "confidence": rel["confidence"],
+            "status": "verified",
+            "public": False,
+        })
+        imported = {"mentorship_id": mentorship["id"], "duplicate": False}
+        repositories.set_submission_status(submission_id, "approved", review_note="已导入本地图谱")
+    except repositories.DuplicateMentorshipError:
+        imported = {"mentorship_id": None, "duplicate": True}
+        repositories.set_submission_status(submission_id, "approved", review_note="关系已存在，未重复导入")
+    return {"submission": repositories.get_submission(submission_id), "imported": imported}
+
+
+def reject_submission_service(submission_id: str, review_note: str | None = None) -> dict:
+    submission = repositories.set_submission_status(
+        submission_id, "rejected", review_note=(review_note or "").strip()[:1000] or None
+    )
+    if submission is None:
+        raise NotFoundError("submission not found")
+    return submission

@@ -175,3 +175,57 @@ def delete_mentorship(mentorship_id):
 def export_public():
     result = services.export_public_service()
     return jsonify(result)
+
+
+@bp.post("/submissions")
+def create_submission():
+    try:
+        payload = _json_payload()
+        submission = services.create_submission_service(
+            payload.get("payload"), payload.get("submitter_note")
+        )
+    except services.ValidationError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify({"submission": submission}), 201
+
+
+@bp.get("/submissions")
+def list_submissions():
+    status = (request.args.get("status") or "").strip() or None
+    return jsonify({"submissions": repositories.list_submissions(status)})
+
+
+@bp.get("/submissions/<submission_id>")
+def get_submission(submission_id):
+    submission = repositories.get_submission(submission_id)
+    if submission is None:
+        return jsonify({"error": "submission not found"}), 404
+    return jsonify({"submission": submission})
+
+
+@bp.post("/submissions/<submission_id>/approve")
+def approve_submission(submission_id):
+    try:
+        result = services.approve_submission_service(submission_id)
+    except services.NotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    except services.ValidationError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify(result)
+
+
+@bp.post("/submissions/<submission_id>/reject")
+def reject_submission(submission_id):
+    try:
+        payload = _json_payload()
+        submission = services.reject_submission_service(submission_id, payload.get("review_note"))
+    except services.NotFoundError as error:
+        return jsonify({"error": str(error)}), 404
+    return jsonify({"submission": submission})
+
+
+@bp.delete("/submissions/<submission_id>")
+def delete_submission(submission_id):
+    if not repositories.delete_submission(submission_id):
+        return jsonify({"error": "submission not found"}), 404
+    return jsonify({"deleted": True})

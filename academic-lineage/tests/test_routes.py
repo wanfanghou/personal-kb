@@ -296,6 +296,83 @@ def test_delete_mentorship_endpoint(app):
     assert client.delete(f"/api/mentorships/{created['id']}").status_code == 404
 
 
+SUBMISSION_PAYLOAD = {
+    "mentor": {"name": "投稿导师", "homepage_url": "https://example.edu/sub-mentor", "title": "Professor"},
+    "student": {"name": "投稿学生", "homepage_url": "https://example.edu/sub-student", "title": "PhD Student"},
+    "relationship": {
+        "relationship_type": "phd",
+        "start_year": 2020,
+        "end_year": 2024,
+        "institution": "NUS",
+        "evidence_url": "https://example.edu/sub-student",
+        "evidence_text": "主页列出导师",
+    },
+}
+
+
+def test_submission_approve_imports_relationship(app):
+    client = app.test_client()
+    created = client.post("/api/submissions", json={"payload": SUBMISSION_PAYLOAD, "submitter_note": "请审核"})
+    assert created.status_code == 201
+    submission_id = created.get_json()["submission"]["id"]
+    assert created.get_json()["submission"]["status"] == "pending"
+
+    pending = client.get("/api/submissions?status=pending").get_json()["submissions"]
+    assert len(pending) == 1
+
+    approved = client.post(f"/api/submissions/{submission_id}/approve")
+    assert approved.status_code == 200
+    body = approved.get_json()
+    assert body["submission"]["status"] == "approved"
+    assert body["imported"]["duplicate"] is False
+
+    persons = client.get("/api/persons").get_json()["persons"]
+    assert {p["name"] for p in persons} == {"投稿导师", "投稿学生"}
+    rels = client.get("/api/mentorships").get_json()["mentorships"]
+    assert len(rels) == 1
+    assert rels[0]["status"] == "verified"
+    assert rels[0]["public"] is False
+
+    assert client.post(f"/api/submissions/{submission_id}/approve").status_code == 400
+
+
+def test_submission_reject_and_delete(app):
+    client = app.test_client()
+    submission_id = client.post("/api/submissions", json={"payload": SUBMISSION_PAYLOAD}).get_json()["submission"]["id"]
+    rejected = client.post(f"/api/submissions/{submission_id}/reject", json={"review_note": "证据不足"})
+    assert rejected.status_code == 200
+    assert rejected.get_json()["submission"]["status"] == "rejected"
+    assert rejected.get_json()["submission"]["review_note"] == "证据不足"
+    assert client.delete(f"/api/submissions/{submission_id}").status_code == 200
+    assert client.get("/api/submissions").get_json()["submissions"] == []
+
+
+def test_submission_rejects_identical_homepages(app):
+    payload = {
+        "mentor": {"name": "A", "homepage_url": "https://example.edu/a"},
+        "student": {"name": "B", "homepage_url": "https://example.edu/a"},
+        "relationship": {"relationship_type": "phd"},
+    }
+    response = app.test_client().post("/api/submissions", json={"payload": payload})
+    assert response.status_code == 400
+
+
+def test_submission_duplicate_relationship_marks_approved(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={"name": "投稿导师", "homepage_url": "https://example.edu/sub-mentor"}).get_json()
+    student = client.post("/api/persons", json={"name": "投稿学生", "homepage_url": "https://example.edu/sub-student"}).get_json()
+    client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": student["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/sub-student",
+    })
+    submission_id = client.post("/api/submissions", json={"payload": SUBMISSION_PAYLOAD}).get_json()["submission"]["id"]
+    approved = client.post(f"/api/submissions/{submission_id}/approve")
+    assert approved.status_code == 200
+    body = approved.get_json()
+    assert body["imported"]["duplicate"] is True
+    assert body["submission"]["status"] == "approved"
+
+
 def test_create_person_stores_title_editorial_and_honors(app):
     client = app.test_client()
     response = client.post("/api/persons", json={

@@ -34,6 +34,7 @@ const PAGE_TITLES = {
   entry: '录入关系',
   scholars: '学者库',
   relationships: '关系库',
+  submissions: '投稿审核',
   export: '公开导出',
 };
 
@@ -95,6 +96,7 @@ function switchPage(page) {
   }
   if (page === 'scholars') refreshScholarList();
   if (page === 'relationships') refreshRelationshipList();
+  if (page === 'submissions') refreshSubmissionList();
 }
 
 /* ================= 统计与筛选选项 ================= */
@@ -881,6 +883,189 @@ async function refreshRelationshipList() {
   }
 }
 
+/* ================= 投稿审核 ================= */
+
+const SUBMISSION_STATUS_ZH = { pending: '待审核', approved: '已通过', rejected: '已拒绝' };
+
+function submissionStatusBadge(status) {
+  const cls = status === 'pending' ? 'badge-warn' : status === 'approved' ? 'badge-ok' : 'badge-rejected';
+  return `<span class="badge ${cls}">${SUBMISSION_STATUS_ZH[status] || status}</span>`;
+}
+
+async function refreshPendingBadge() {
+  try {
+    const data = await api('/api/submissions?status=pending');
+    const badge = $('pending-badge');
+    const count = data.submissions.length;
+    badge.hidden = count === 0;
+    badge.textContent = count;
+  } catch (error) {
+    /* 忽略 */
+  }
+}
+
+async function refreshSubmissionList() {
+  try {
+    const status = $('sub-status').value;
+    const params = status ? `?status=${status}` : '';
+    const data = await api(`/api/submissions${params}`);
+    const list = $('submission-list');
+    list.innerHTML = '';
+    if (!data.submissions.length) {
+      list.innerHTML = '<li class="muted" style="padding:12px">没有投稿</li>';
+      return;
+    }
+    for (const submission of data.submissions) {
+      const payload = submission.payload || {};
+      const mentor = payload.mentor || {};
+      const student = payload.student || {};
+      const rel = payload.relationship || {};
+      const years = [rel.start_year, rel.end_year].filter(Boolean).join(' – ');
+      const item = document.createElement('li');
+      item.className = 'list-item';
+      item.innerHTML = `
+        <div class="li-main">
+          <div class="li-title">${escapeHtml(student.name || '?')} ← ${escapeHtml(mentor.name || '?')}</div>
+          <div class="li-meta">${escapeHtml([REL_TYPE_ZH[rel.relationship_type] || rel.relationship_type, years].filter(Boolean).join(' · ')) || '—'}
+            · 提交于 ${escapeHtml((submission.submitted_at || '').slice(0, 16).replace('T', ' '))}</div>
+        </div>
+        ${submissionStatusBadge(submission.status)}
+        <div class="li-actions">
+          <button class="btn btn-small" data-action="view-submission" data-id="${submission.id}">查看</button>
+          ${submission.status === 'pending'
+            ? `<button class="btn btn-primary btn-small" data-action="approve-submission" data-id="${submission.id}">通过</button>
+               <button class="btn btn-danger btn-small" data-action="reject-submission" data-id="${submission.id}">拒绝</button>`
+            : ''}
+          <button class="btn btn-danger btn-small" data-action="delete-submission" data-id="${submission.id}">删除</button>
+        </div>`;
+      list.appendChild(item);
+    }
+  } catch (error) {
+    $('submission-list').innerHTML = `<li class="status error">${escapeHtml(error.message)}</li>`;
+  }
+}
+
+function renderSubmissionDetails(submission) {
+  const payload = submission.payload || {};
+  const mentor = payload.mentor || {};
+  const student = payload.student || {};
+  const rel = payload.relationship || {};
+  const years = [rel.start_year, rel.end_year].filter(Boolean).join(' – ');
+  $('submission-detail-title').textContent = `投稿：${student.name || '?'} ← ${mentor.name || '?'}`;
+  $('submission-detail-content').innerHTML = `
+    ${submissionStatusBadge(submission.status)}
+    <dl class="detail-list">
+      <dt>导师</dt><dd>${escapeHtml(mentor.name)}${mentor.title ? `（${escapeHtml(mentor.title)}）` : ''}</dd>
+      <dt>导师主页</dt><dd><a href="${escapeHtml(mentor.homepage_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(mentor.homepage_url)}</a></dd>
+      <dt>学生</dt><dd>${escapeHtml(student.name)}${student.title ? `（${escapeHtml(student.title)}）` : ''}</dd>
+      <dt>学生主页</dt><dd><a href="${escapeHtml(student.homepage_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(student.homepage_url)}</a></dd>
+      <dt>类型</dt><dd>${REL_TYPE_ZH[rel.relationship_type] || rel.relationship_type}</dd>
+      <dt>年份</dt><dd>${years || '未填写'}</dd>
+      ${rel.institution ? `<dt>机构</dt><dd>${escapeHtml(rel.institution)}</dd>` : ''}
+      ${rel.student_placement ? `<dt>毕业去向</dt><dd>${escapeHtml(rel.student_placement)}</dd>` : ''}
+      <dt>证据 URL</dt><dd><a href="${escapeHtml(rel.evidence_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(rel.evidence_url)}</a></dd>
+      ${rel.evidence_text ? `<dt>证据说明</dt><dd>${escapeHtml(rel.evidence_text)}</dd>` : ''}
+      <dt>可信度</dt><dd>${escapeHtml(rel.confidence || 'confirmed')}</dd>
+      ${submission.submitter_note ? `<dt>投稿人留言</dt><dd>${escapeHtml(submission.submitter_note)}</dd>` : ''}
+      ${submission.review_note ? `<dt>审核备注</dt><dd>${escapeHtml(submission.review_note)}</dd>` : ''}
+    </dl>
+    ${submission.status === 'pending' ? `
+      <div class="detail-actions">
+        <button class="btn btn-primary btn-small" data-action="approve-submission" data-id="${submission.id}">通过并导入图谱</button>
+        <button class="btn btn-danger btn-small" data-action="reject-submission" data-id="${submission.id}">拒绝</button>
+      </div>` : ''}
+  `;
+}
+
+async function importSubmissionPaste() {
+  const raw = $('sub-paste').value.trim();
+  const msg = $('sub-status-msg');
+  if (!raw) {
+    msg.textContent = '请先粘贴投稿 JSON';
+    msg.className = 'status error';
+    return;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    msg.textContent = `JSON 解析失败：${error.message}`;
+    msg.className = 'status error';
+    return;
+  }
+  try {
+    const data = await api('/api/submissions', {
+      method: 'POST',
+      body: JSON.stringify({
+        payload: parsed.payload || parsed,
+        submitter_note: parsed.submitter_note || null,
+      }),
+    });
+    $('sub-paste').value = '';
+    msg.textContent = '已导入为待审核投稿';
+    msg.className = 'status ok';
+    refreshSubmissionList();
+    refreshPendingBadge();
+    void data;
+  } catch (error) {
+    msg.textContent = `导入失败：${error.message}`;
+    msg.className = 'status error';
+  }
+}
+
+async function approveSubmission(submissionId) {
+  if (!window.confirm('通过并导入这条投稿？将创建两位学者和一条关系（默认私有）。')) return;
+  try {
+    const result = await api(`/api/submissions/${submissionId}/approve`, { method: 'POST' });
+    setDetail('graph', '详情', GRAPH_DETAIL_HINT);
+    refreshSubmissionList();
+    refreshPendingBadge();
+    refreshStats();
+    refreshScholarList();
+    refreshRelationshipList();
+    refreshFilterOptions();
+    refreshGraphAfterChange();
+    const note = result.imported && result.imported.duplicate
+      ? '投稿已通过；对应关系此前已存在，未重复导入。'
+      : '投稿已通过并导入图谱（可在关系库中查看）。';
+    $('submission-detail-content').innerHTML = `<p class="status ok">${note}</p>`;
+  } catch (error) {
+    window.alert(`审核失败：${error.message}`);
+  }
+}
+
+async function rejectSubmission(submissionId) {
+  if (!window.confirm('拒绝这条投稿？')) return;
+  try {
+    await api(`/api/submissions/${submissionId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ review_note: '已拒绝' }),
+    });
+    refreshSubmissionList();
+    refreshPendingBadge();
+    setDetail('graph', '详情', GRAPH_DETAIL_HINT);
+  } catch (error) {
+    window.alert(`操作失败：${error.message}`);
+  }
+}
+
+async function deleteSubmission(submissionId) {
+  if (!window.confirm('删除这条投稿记录？此操作不可恢复。')) return;
+  try {
+    await api(`/api/submissions/${submissionId}`, { method: 'DELETE' });
+    refreshSubmissionList();
+    refreshPendingBadge();
+  } catch (error) {
+    window.alert(`删除失败：${error.message}`);
+  }
+}
+
+function bindSubmissionControls() {
+  $('sub-status').addEventListener('change', refreshSubmissionList);
+  $('sub-refresh').addEventListener('click', () => { refreshSubmissionList(); refreshPendingBadge(); });
+  $('sub-import').addEventListener('click', importSubmissionPaste);
+}
+
 /* ================= 导出页 ================= */
 
 async function exportPublic() {
@@ -964,6 +1149,15 @@ function bindRelationshipControls() {
   });
 }
 
+async function viewSubmission(submissionId) {
+  try {
+    const data = await api(`/api/submissions/${submissionId}`);
+    renderSubmissionDetails(data.submission);
+  } catch (error) {
+    $('submission-detail-content').innerHTML = `<p class="status error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
 function bindDetailActions() {
   document.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-action]');
@@ -976,6 +1170,10 @@ function bindDetailActions() {
     if (action === 'save-relationship') saveRelationshipEdit();
     if (action === 'delete-person' && detail.person) deletePerson();
     if (action === 'delete-relationship' && detail.mentorship) deleteRelationship();
+    if (action === 'view-submission') viewSubmission(button.dataset.id);
+    if (action === 'approve-submission') approveSubmission(button.dataset.id);
+    if (action === 'reject-submission') rejectSubmission(button.dataset.id);
+    if (action === 'delete-submission') deleteSubmission(button.dataset.id);
     if (action === 'cancel-edit') {
       editingMode = null;
       if (detail.mentorship) renderMentorshipDetails(detail.mentorship, detail.mentorshipContainer);
@@ -993,6 +1191,7 @@ function initApp() {
   bindGraphControls();
   bindScholarControls();
   bindRelationshipControls();
+  bindSubmissionControls();
   bindDetailActions();
   $('export-btn').addEventListener('click', exportPublic);
   refreshStats();
@@ -1000,6 +1199,8 @@ function initApp() {
   loadNetwork();
   refreshScholarList();
   refreshRelationshipList();
+  refreshSubmissionList();
+  refreshPendingBadge();
 }
 
 if (typeof cytoscape === 'undefined') {

@@ -311,6 +311,75 @@ function showRelationshipDetails(rel) {
   `;
 }
 
+/* ---------- 投稿 ---------- */
+
+const REL_TYPE_ZH_PUB = {
+  phd: '博士导师', master: '硕士导师', postdoc: '博士后合作导师',
+  informal: '非正式指导', other: '其他',
+};
+
+function generateContribution() {
+  const required = [
+    ['c-mentor-name', '导师姓名'],
+    ['c-mentor-url', '导师主页 URL'],
+    ['c-student-name', '学生姓名'],
+    ['c-student-url', '学生主页 URL'],
+  ];
+  for (const [id, label] of required) {
+    if (!$(id).value.trim()) {
+      $('c-status').textContent = `请填写${label}`;
+      return;
+    }
+  }
+  const payload = {
+    mentor: {
+      name: $('c-mentor-name').value.trim(),
+      homepage_url: $('c-mentor-url').value.trim(),
+      title: $('c-mentor-title').value.trim() || null,
+    },
+    student: {
+      name: $('c-student-name').value.trim(),
+      homepage_url: $('c-student-url').value.trim(),
+      title: $('c-student-title').value.trim() || null,
+    },
+    relationship: {
+      relationship_type: $('c-type').value,
+      confidence: $('c-confidence').value,
+      start_year: $('c-start').value ? parseInt($('c-start').value, 10) : null,
+      end_year: $('c-end').value ? parseInt($('c-end').value, 10) : null,
+      institution: $('c-institution').value.trim() || null,
+      evidence_url: $('c-evidence').value.trim() || $('c-student-url').value.trim(),
+      evidence_text: $('c-evidence-text').value.trim() || null,
+    },
+  };
+  const envelope = {
+    payload,
+    submitter_note: $('c-note').value.trim() || null,
+    submitted_at: new Date().toISOString(),
+  };
+  $('c-output').value = JSON.stringify(envelope, null, 2);
+  $('c-copy').disabled = false;
+  $('c-status').textContent = '已生成。复制后发送给管理员（微信 / 邮件等）。';
+}
+
+async function copyContribution() {
+  try {
+    await navigator.clipboard.writeText($('c-output').value);
+    $('c-status').textContent = '已复制到剪贴板，去粘贴发送给管理员吧。';
+  } catch (error) {
+    $('c-output').select();
+    $('c-status').textContent = '复制失败，请手动全选复制（已为你选中）。';
+  }
+}
+
+function bindContribution() {
+  const modal = $('contribute-modal');
+  $('contribute-btn').addEventListener('click', () => { modal.hidden = false; });
+  $('contribute-close').addEventListener('click', () => { modal.hidden = true; });
+  $('c-generate').addEventListener('click', generateContribution);
+  $('c-copy').addEventListener('click', copyContribution);
+}
+
 /* ---------- 初始化 ---------- */
 
 function initApp() {
@@ -341,6 +410,7 @@ function initApp() {
 
 function start() {
   initApp();
+  bindContribution();
   loadData();
   if (typeof cytoscape !== 'undefined') ensureCy();
 }

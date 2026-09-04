@@ -40,6 +40,13 @@
         <span>关系库</span>
       </button>
 
+      <div class="nav-label">协作 COLLAB</div>
+      <button class="nav-item" data-page="submissions" type="button">
+        <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-8-8"/><path d="M20 4v4h-4"/><path d="M12 8v4l3 2"/></svg>
+        <span>投稿审核</span>
+        <span id="pending-badge" class="nav-badge" hidden>0</span>
+      </button>
+
       <div class="nav-label">发布 PUBLISH</div>
       <button class="nav-item" data-page="export" type="button">
         <svg viewBox="0 0 24 24"><path d="M12 16V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4 16v3a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-3"/></svg>
@@ -195,6 +202,37 @@
         <aside class="detail-panel">
           <h2 id="relationship-detail-title">关系详情</h2>
           <div id="relationship-detail-content" class="muted">点击左侧关系查看详情，可编辑状态、年份、毕业去向、证据等。</div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ========== 投稿审核页 ========== -->
+    <section id="page-submissions" class="page">
+      <div class="list-layout">
+        <div class="list-main">
+          <div class="filterbar">
+            <select id="sub-status" title="状态">
+              <option value="pending" selected>待审核</option>
+              <option value="">全部</option>
+              <option value="approved">已通过</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+            <button id="sub-refresh" class="btn btn-small" type="button">刷新</button>
+          </div>
+          <div class="card paste-card">
+            <h2>导入朋友发来的投稿</h2>
+            <p class="muted">把朋友在公开站生成的 JSON 粘贴到下面，点「导入为待审核」；然后在上方列表里逐个审核。通过后会自动创建两位学者和关系（默认私有，可再编辑/公开）。</p>
+            <textarea id="sub-paste" rows="7" placeholder='粘贴投稿 JSON，例如：{"mentor": {...}, "student": {...}, "relationship": {...}}'></textarea>
+            <div class="detail-actions">
+              <button id="sub-import" class="btn btn-primary" type="button">导入为待审核</button>
+            </div>
+            <p id="sub-status-msg" class="status"></p>
+          </div>
+          <ul id="submission-list" class="list"></ul>
+        </div>
+        <aside class="detail-panel">
+          <h2 id="submission-detail-title">投稿详情</h2>
+          <div id="submission-detail-content" class="muted">点击左侧投稿查看内容。审核通过后关系会进入「关系库」。</div>
         </aside>
       </div>
     </section>

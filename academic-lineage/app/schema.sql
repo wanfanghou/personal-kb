@@ -56,3 +56,16 @@ CREATE INDEX IF NOT EXISTS idx_persons_institution ON persons(institution);
 CREATE INDEX IF NOT EXISTS idx_mentorships_mentor ON mentorships(mentor_id);
 CREATE INDEX IF NOT EXISTS idx_mentorships_student ON mentorships(student_id);
 CREATE INDEX IF NOT EXISTS idx_snapshots_person ON source_snapshots(person_id);
+
+CREATE TABLE IF NOT EXISTS submissions (
+    id TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected')),
+    submitter_note TEXT,
+    review_note TEXT,
+    submitted_at TEXT NOT NULL,
+    reviewed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(status);

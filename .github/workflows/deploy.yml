@@ -32,6 +32,11 @@ jobs:
       - name: Build
         run: npm run docs:build
 
+      - name: Copy academic-lineage public site
+        run: |
+          mkdir -p docs/.vitepress/dist/academic-lineage
+          cp -r academic-lineage/public/. docs/.vitepress/dist/academic-lineage/
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

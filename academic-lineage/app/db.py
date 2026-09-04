@@ -48,6 +48,10 @@ def _migrate_schema(db: sqlite3.Connection) -> None:
     if "student_placement" not in mentorship_columns:
         db.execute("ALTER TABLE mentorships ADD COLUMN student_placement TEXT")
 
+    submission_columns = {row["name"] for row in db.execute("PRAGMA table_info(submissions)")}
+    if "review_note" not in submission_columns:
+        db.execute("ALTER TABLE submissions ADD COLUMN review_note TEXT")
+
 
 def init_app(app) -> None:
     app.teardown_appcontext(close_db)

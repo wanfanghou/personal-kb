@@ -9,7 +9,10 @@
 <body>
   <header class="topbar">
     <h1>学术谱系 · 公开图谱</h1>
-    <span id="manifest-info" class="muted"></span>
+    <div class="topbar-actions">
+      <button id="contribute-btn" class="btn btn-primary" type="button">投稿关系</button>
+      <span id="manifest-info" class="muted"></span>
+    </div>
   </header>
 
   <main class="layout">
@@ -41,6 +44,60 @@
       <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>箭头由导师指向学生；黄色为当前中心学者。</div>
     </aside>
   </main>
+
+  <!-- ============ 投稿弹窗 ============ -->
+  <div id="contribute-modal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>投稿关系</h2>
+        <button id="contribute-close" class="btn btn-small" type="button">关闭</button>
+      </div>
+      <p class="muted">填写你掌握的师生关系信息，点「生成投稿内容」后复制 JSON，发给图谱管理员审核（微信 / 邮件等）。审核通过后会导入公开图谱。</p>
+      <div class="modal-body">
+        <h3>导师</h3>
+        <label>姓名 <input id="c-mentor-name" type="text"></label>
+        <label>主页 URL <input id="c-mentor-url" type="url" placeholder="https://…"></label>
+        <label>职称 <input id="c-mentor-title" type="text" placeholder="如 Professor"></label>
+        <h3>学生</h3>
+        <label>姓名 <input id="c-student-name" type="text"></label>
+        <label>主页 URL <input id="c-student-url" type="url" placeholder="https://…"></label>
+        <label>当前职称 <input id="c-student-title" type="text" placeholder="如 Assistant Professor"></label>
+        <h3>关系</h3>
+        <div class="form-grid">
+          <label>关系类型
+            <select id="c-type">
+              <option value="phd" selected>博士导师</option>
+              <option value="master">硕士导师</option>
+              <option value="postdoc">博士后合作导师</option>
+              <option value="informal">非正式指导</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label>可信度
+            <select id="c-confidence">
+              <option value="confirmed" selected>confirmed 已确认</option>
+              <option value="probable">probable 很可能</option>
+              <option value="uncertain">uncertain 不确定</option>
+            </select>
+          </label>
+          <label>入学年份 <input id="c-start" type="number" min="1900" max="2100"></label>
+          <label>毕业年份 <input id="c-end" type="number" min="1900" max="2100"></label>
+          <label>机构 <input id="c-institution" type="text"></label>
+          <label>证据 URL <input id="c-evidence" type="url" placeholder="默认使用学生主页 URL"></label>
+          <label>证据说明 <input id="c-evidence-text" type="text" placeholder="如：主页列出 PhD advisor"></label>
+        </div>
+        <label>给管理员的留言 <input id="c-note" type="text"></label>
+        <div class="detail-actions">
+          <button id="c-generate" class="btn btn-primary" type="button">生成投稿内容</button>
+        </div>
+        <label>投稿内容（复制后发给管理员）<textarea id="c-output" rows="8" readonly></textarea></label>
+        <div class="detail-actions">
+          <button id="c-copy" class="btn" type="button" disabled>复制投稿内容</button>
+        </div>
+        <p id="c-status" class="muted"></p>
+      </div>
+    </div>
+  </div>
 
   <script src="vendor/cytoscape.min.js"></script>
   <script src="app.js"></script>

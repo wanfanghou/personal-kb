@@ -603,6 +603,61 @@ def delete_person(person_id: str) -> dict:
     return {"deleted": True, "relationships_removed": relationships_removed}
 
 
+def create_submission(payload: dict, submitter_note: str | None = None) -> dict:
+    db = get_db()
+    submission_id = new_id()
+    db.execute(
+        "INSERT INTO submissions (id, payload_json, status, submitter_note, submitted_at)"
+        " VALUES (?, ?, 'pending', ?, ?)",
+        (submission_id, json.dumps(payload, ensure_ascii=False), submitter_note, now_iso()),
+    )
+    db.commit()
+    return get_submission(submission_id)
+
+
+def _submission_to_dict(row: sqlite3.Row) -> dict:
+    data = dict(row)
+    data["payload"] = json.loads(data.pop("payload_json") or "{}")
+    return data
+
+
+def get_submission(submission_id: str) -> dict | None:
+    row = get_db().execute("SELECT * FROM submissions WHERE id = ?", (submission_id,)).fetchone()
+    return _submission_to_dict(row) if row is not None else None
+
+
+def list_submissions(status: str | None = None, limit: int = 200) -> list[dict]:
+    db = get_db()
+    sql = "SELECT * FROM submissions"
+    params: list = []
+    if status:
+        sql += " WHERE status = ?"
+        params.append(status)
+    sql += " ORDER BY submitted_at DESC LIMIT ?"
+    params.append(max(1, min(int(limit), 500)))
+    rows = db.execute(sql, params).fetchall()
+    return [_submission_to_dict(row) for row in rows]
+
+
+def set_submission_status(submission_id: str, status: str, review_note: str | None = None) -> dict | None:
+    current = get_db().execute("SELECT 1 FROM submissions WHERE id = ?", (submission_id,)).fetchone()
+    if current is None:
+        return None
+    get_db().execute(
+        "UPDATE submissions SET status = ?, reviewed_at = ?, review_note = ? WHERE id = ?",
+        (status, now_iso(), review_note, submission_id),
+    )
+    get_db().commit()
+    return get_submission(submission_id)
+
+
+def delete_submission(submission_id: str) -> bool:
+    db = get_db()
+    cursor = db.execute("DELETE FROM submissions WHERE id = ?", (submission_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+
 def record_snapshot(person_id: str, snapshot: dict) -> dict:
     """Record minimal identifying info from a user-submitted URL fetch."""
     db = get_db()
