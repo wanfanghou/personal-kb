@@ -80,9 +80,14 @@ def test_duplicate_mentorship_returns_409(app):
         "relationship_type": "phd",
         "evidence_url": "https://example.edu/s",
     }
-    assert client.post("/api/mentorships", json=payload).status_code == 201
+    created = client.post("/api/mentorships", json=payload)
+    assert created.status_code == 201
     response = client.post("/api/mentorships", json=payload)
     assert response.status_code == 409
+    body = response.get_json()
+    assert body["existing"]["id"] == created.get_json()["mentorship"]["id"]
+    assert body["existing"]["mentor_id"] == mentor["person"]["id"]
+    assert body["existing"]["student_name"] == "S"
 
 
 def test_lineage_endpoint_serves_upstream_chain(app):
@@ -221,6 +226,43 @@ def test_filters_endpoint_lists_options(app):
     assert body["titles"] == ["Professor"]
     assert body["start_years"] == []
     assert body["end_years"] == []
+
+
+def test_network_endpoint_returns_nodes_and_edges(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={
+        "name": "M", "homepage_url": "https://example.edu/m", "institution": "NUS",
+    }).get_json()
+    student = client.post("/api/persons", json={
+        "name": "S", "homepage_url": "https://example.edu/s", "institution": "NUS",
+    }).get_json()
+    client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": student["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s",
+    })
+    response = client.get("/api/network?institution=NUS")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert {n["name"] for n in body["nodes"]} == {"M", "S"}
+    assert len(body["edges"]) == 1
+
+    response = client.get("/api/network?relationship_type=master")
+    assert response.get_json()["edges"] == []
+
+
+def test_mentorships_list_endpoint_supports_filters(app):
+    client = app.test_client()
+    mentor = client.post("/api/persons", json={"name": "M", "homepage_url": "https://example.edu/m"}).get_json()
+    student = client.post("/api/persons", json={"name": "S", "homepage_url": "https://example.edu/s"}).get_json()
+    client.post("/api/mentorships", json={
+        "mentor_id": mentor["person"]["id"], "student_id": student["person"]["id"],
+        "relationship_type": "phd", "evidence_url": "https://example.edu/s", "status": "verified",
+    })
+    response = client.get("/api/mentorships?status=verified")
+    assert response.status_code == 200
+    body = response.get_json()
+    assert len(body["mentorships"]) == 1
+    assert body["mentorships"][0]["student_name"] == "S"
 
 
 def test_create_person_stores_title_editorial_and_honors(app):

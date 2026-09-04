@@ -150,6 +150,7 @@ def find_persons(query: str, limit: int = 50, filters: dict | None = None) -> li
     query = (query or "").strip()
     institution = (filters.get("institution") or "").strip() or None
     title = (filters.get("title") or "").strip() or None
+    honor = (filters.get("honor") or "").strip() or None
     start_year = filters.get("start_year")
     end_year = filters.get("end_year")
     db = get_db()
@@ -170,6 +171,9 @@ def find_persons(query: str, limit: int = 50, filters: dict | None = None) -> li
     if title:
         where.append("title = ?")
         params.append(title)
+    if honor:
+        where.append("honors_json LIKE ? ESCAPE '\\'")
+        params.append("%" + honor.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
     if start_year not in (None, ""):
         where.append(
             "EXISTS (SELECT 1 FROM mentorships m WHERE m.student_id = persons.id AND m.start_year = ?)"
@@ -194,6 +198,13 @@ def find_persons(query: str, limit: int = 50, filters: dict | None = None) -> li
 def get_filter_options() -> dict:
     """Distinct values for the filter dropdowns on the management page."""
     db = get_db()
+    honors = set()
+    for (honors_json,) in db.execute(
+        "SELECT honors_json FROM persons WHERE honors_json IS NOT NULL AND honors_json <> '[]'"
+    ):
+        for item in json.loads(honors_json or "[]"):
+            if item.strip():
+                honors.add(item.strip())
     return {
         "institutions": [
             row["value"] for row in db.execute(
@@ -207,6 +218,7 @@ def get_filter_options() -> dict:
                 " WHERE title IS NOT NULL AND title <> '' ORDER BY title"
             )
         ],
+        "honors": sorted(honors),
         "start_years": [
             row["value"] for row in db.execute(
                 "SELECT DISTINCT start_year AS value FROM mentorships"
@@ -219,6 +231,7 @@ def get_filter_options() -> dict:
                 " WHERE end_year IS NOT NULL ORDER BY end_year"
             )
         ],
+        "relationship_types": sorted(RELATIONSHIP_TYPES),
     }
 
 
@@ -234,6 +247,23 @@ def get_mentorship(mentorship_id: str) -> dict | None:
         WHERE m.id = ?
         """,
         (mentorship_id,),
+    ).fetchone()
+    return _mentorship_to_dict(row) if row is not None else None
+
+
+def find_mentorship(mentor_id: str, student_id: str, relationship_type: str) -> dict | None:
+    """Find an existing mentorship by its uniqueness triple."""
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT m.*, mentor.name AS mentor_name, mentor.homepage_url AS mentor_homepage_url,
+               student.name AS student_name, student.homepage_url AS student_homepage_url
+        FROM mentorships m
+        JOIN persons mentor ON mentor.id = m.mentor_id
+        JOIN persons student ON student.id = m.student_id
+        WHERE m.mentor_id = ? AND m.student_id = ? AND m.relationship_type = ?
+        """,
+        (mentor_id, student_id, relationship_type),
     ).fetchone()
     return _mentorship_to_dict(row) if row is not None else None
 
@@ -468,6 +498,85 @@ def get_lineage(person_id: str, up: int, down: int) -> dict:
         "up": up,
         "down": down,
     }
+
+
+def list_mentorships(filters: dict | None = None, limit: int = 200) -> list[dict]:
+    """All mentorships (with names) for the relationship list page."""
+    filters = filters or {}
+    query = (filters.get("q") or "").strip()
+    status = (filters.get("status") or "").strip() or None
+    relationship_type = (filters.get("relationship_type") or "").strip() or None
+    db = get_db()
+
+    where: list[str] = []
+    params: list = []
+    if query:
+        pattern = "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append("(mentor.name LIKE ? ESCAPE '\\' OR student.name LIKE ? ESCAPE '\\'"
+                     " OR mentor.name_en LIKE ? ESCAPE '\\' OR student.name_en LIKE ? ESCAPE '\\')")
+        params += [pattern, pattern, pattern, pattern]
+    if status:
+        where.append("m.status = ?")
+        params.append(status)
+    if relationship_type:
+        where.append("m.relationship_type = ?")
+        params.append(relationship_type)
+
+    sql = (
+        "SELECT m.*, mentor.name AS mentor_name, mentor.homepage_url AS mentor_homepage_url,"
+        " student.name AS student_name, student.homepage_url AS student_homepage_url"
+        " FROM mentorships m"
+        " JOIN persons mentor ON mentor.id = m.mentor_id"
+        " JOIN persons student ON student.id = m.student_id"
+    )
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY m.updated_at DESC LIMIT ?"
+    params.append(max(1, min(int(limit), 500)))
+    rows = db.execute(sql, params).fetchall()
+    return [_mentorship_to_dict(row) for row in rows]
+
+
+def get_network(filters: dict | None = None) -> dict:
+    """Overview network: filtered persons as nodes, filtered mentorships as edges.
+
+    Edges are only included when both endpoints are present in the node set.
+    """
+    filters = filters or {}
+    query = (filters.get("q") or "").strip()
+    public_only = str(filters.get("public") or "").lower() in ("1", "true", "on")
+    person_filters = {
+        "institution": filters.get("institution"),
+        "title": filters.get("title"),
+        "honor": filters.get("honor"),
+        "start_year": filters.get("start_year"),
+        "end_year": filters.get("end_year"),
+    }
+    nodes = find_persons(query, 500, person_filters)
+    if public_only:
+        nodes = [node for node in nodes if node["public"]]
+    node_ids = {node["id"] for node in nodes}
+
+    db = get_db()
+    where: list[str] = ["m.public = 1"] if public_only else []
+    params: list = []
+    relationship_type = (filters.get("relationship_type") or "").strip() or None
+    if relationship_type:
+        where.append("m.relationship_type = ?")
+        params.append(relationship_type)
+    sql = (
+        "SELECT m.*, mentor.name AS mentor_name, student.name AS student_name"
+        " FROM mentorships m"
+        " JOIN persons mentor ON mentor.id = m.mentor_id"
+        " JOIN persons student ON student.id = m.student_id"
+    )
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    edges = []
+    for row in db.execute(sql, params).fetchall():
+        if row["mentor_id"] in node_ids and row["student_id"] in node_ids:
+            edges.append(_mentorship_to_dict(row))
+    return {"nodes": nodes, "edges": edges}
 
 
 def record_snapshot(person_id: str, snapshot: dict) -> dict:

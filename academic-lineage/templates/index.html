@@ -7,113 +7,217 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <header class="topbar">
-    <h1>学术谱系 · 本地管理</h1>
-    <div class="topbar-actions">
-      <span id="db-stats" class="muted"></span>
-      <button id="export-btn" class="btn btn-secondary" type="button">导出公开数据</button>
-      <span id="export-status" class="muted"></span>
+<div class="app">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">谱</div>
+      <div>
+        <strong>学术谱系</strong>
+        <span>ACADEMIC LINEAGE</span>
+      </div>
     </div>
-  </header>
 
-  <main class="layout">
-    <section class="sidebar">
-      <div class="card">
-        <h2>搜索学者</h2>
-        <input id="search-input" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
-        <ul id="search-results" class="result-list"></ul>
+    <nav class="nav">
+      <div class="nav-label">图谱 NETWORK</div>
+      <button class="nav-item active" data-page="graph" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="12" cy="19" r="2.2"/><path d="M6.7 6.5l4.6 10M17.3 6.5l-4.6 10"/></svg>
+        <span>学术谱系总览</span>
+      </button>
+
+      <div class="nav-label">数据 DATA</div>
+      <button class="nav-item" data-page="entry" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>录入关系</span>
+      </button>
+      <button class="nav-item" data-page="scholars" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M3.5 20c.8-3.6 3-5.4 5.5-5.4s4.7 1.8 5.5 5.4"/><circle cx="17" cy="9" r="2.6"/><path d="M15.6 14.8c2.8-.3 4.7 1.5 5.4 5.2"/></svg>
+        <span>学者库</span>
+      </button>
+      <button class="nav-item" data-page="relationships" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="18" r="2.6"/><path d="M8.4 7.6l7.2 8.8M15.6 6.6c2.2 0 3.6 1.3 3.6 3.6M8.4 17.4c-2.2 0-3.6-1.3-3.6-3.6"/></svg>
+        <span>关系库</span>
+      </button>
+
+      <div class="nav-label">发布 PUBLISH</div>
+      <button class="nav-item" data-page="export" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 16V4M7.5 8.5L12 4l4.5 4.5"/><path d="M4 16v3a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-3"/></svg>
+        <span>公开导出</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot"><span class="live-dot"></span>数据保存在本地 SQLite</div>
+  </aside>
+
+  <!-- ============ 主区域 ============ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="header-context">
+        <span>ACADEMIC LINEAGE</span>
+        <strong id="page-title">学术谱系总览</strong>
       </div>
+      <span id="db-stats" class="stats-chip"></span>
+    </header>
 
-      <div class="card">
-        <h2>已录入学者</h2>
-        <p class="muted hint">数据保存在本地 SQLite（data/network.sqlite），重启或关闭浏览器后仍在。</p>
-        <div class="filter-bar">
-          <select id="filter-institution" title="按机构筛选"><option value="">全部机构</option></select>
-          <select id="filter-title" title="按职称筛选"><option value="">全部职称</option></select>
-          <select id="filter-start-year" title="按入学年份筛选（学生身份）"><option value="">入学年份不限</option></select>
-          <select id="filter-end-year" title="按毕业年份筛选（学生身份）"><option value="">毕业年份不限</option></select>
-          <button id="filter-clear" class="btn btn-small" type="button">清除筛选</button>
+    <!-- ========== 图谱页 ========== -->
+    <section id="page-graph" class="page active">
+      <div class="graph-layout">
+        <div class="graph-main">
+          <div class="filterbar">
+            <select id="g-institution" title="机构"><option value="">全部机构</option></select>
+            <select id="g-title" title="职称"><option value="">全部职称</option></select>
+            <select id="g-honor" title="荣誉/人才称号"><option value="">全部荣誉</option></select>
+            <select id="g-type" title="关系类型"><option value="">全部关系类型</option></select>
+            <select id="g-start-year" title="入学年份（学生身份）"><option value="">入学年份不限</option></select>
+            <select id="g-end-year" title="毕业年份（学生身份）"><option value="">毕业年份不限</option></select>
+            <label class="checkbox-row"><input id="g-public" type="checkbox"> 仅公开</label>
+            <button id="g-clear" class="btn btn-small" type="button">清除筛选</button>
+          </div>
+          <div class="graph-toolbar">
+            <button id="back-overview" class="btn btn-small" type="button" hidden>← 回到总览</button>
+            <button id="expand-up" class="btn btn-small" type="button">↑ 向上展开一代</button>
+            <button id="expand-down" class="btn btn-small" type="button">↓ 向下展开一代</button>
+            <button id="reset-view" class="btn btn-small" type="button">重置视图</button>
+            <span id="graph-info" class="muted"></span>
+          </div>
+          <div id="cy"></div>
         </div>
-        <ul id="person-list" class="result-list"></ul>
-      </div>
-
-      <div class="card">
-        <h2>录入导师—学生关系</h2>
-        <p class="muted hint">输入两位学者的主页 URL，预览身份后确认方向。关系方向不会自动推断。</p>
-
-        <label for="mentor-url">导师主页 URL</label>
-        <div class="input-group">
-          <input id="mentor-url" type="url" placeholder="https://…" autocomplete="off">
-          <button id="preview-mentor" class="btn" type="button">预览</button>
-        </div>
-        <div id="mentor-card" class="identity-card" hidden></div>
-
-        <label for="student-url">学生主页 URL</label>
-        <div class="input-group">
-          <input id="student-url" type="url" placeholder="https://…" autocomplete="off">
-          <button id="preview-student" class="btn" type="button">预览</button>
-        </div>
-        <div id="student-card" class="identity-card" hidden></div>
-
-        <div class="form-grid">
-          <label>关系类型
-            <select id="relationship-type">
-              <option value="phd" selected>博士导师</option>
-              <option value="master">硕士导师</option>
-              <option value="postdoc">博士后合作导师</option>
-              <option value="informal">非正式指导</option>
-              <option value="other">其他</option>
-            </select>
-          </label>
-          <label>状态
-            <select id="rel-status">
-              <option value="verified" selected>已确认</option>
-              <option value="draft">草稿</option>
-              <option value="rejected">已拒绝</option>
-            </select>
-          </label>
-          <label>可信度
-            <select id="confidence">
-              <option value="confirmed" selected>confirmed 已确认</option>
-              <option value="probable">probable 很可能</option>
-              <option value="uncertain">uncertain 不确定</option>
-            </select>
-          </label>
-          <label>开始年份 <input id="start-year" type="number" min="1900" max="2100" placeholder="如 2020"></label>
-          <label>结束年份 <input id="end-year" type="number" min="1900" max="2100" placeholder="如 2025"></label>
-          <label>机构 <input id="rel-institution" type="text" placeholder="就读/指导所在机构"></label>
-          <label>学生毕业去向 <input id="student-placement" type="text" placeholder="如：毕业后任 XX 大学助理教授"></label>
-          <label>证据 URL <input id="evidence-url" type="url" placeholder="默认使用学生主页 URL"></label>
-          <label>证据说明 <input id="evidence-text" type="text" placeholder="如：主页列出 PhD advisor"></label>
-          <label>私有备注 <input id="notes-private" type="text" placeholder="仅保存在本地，不导出"></label>
-          <label class="checkbox-row"><input id="public-flag" type="checkbox"> 公开（允许导出到公开站点）</label>
-        </div>
-
-        <p id="confirmation-sentence" class="sentence" hidden>
-          学生 <strong id="sentence-student"></strong> 是导师 <strong id="sentence-mentor"></strong> 的学生
-        </p>
-        <button id="confirm-btn" class="btn btn-primary" type="button" disabled>确认并加入图谱</button>
-        <p id="entry-status" class="status"></p>
+        <aside class="detail-panel">
+          <h2 id="graph-detail-title">详情</h2>
+          <div id="graph-detail-content" class="muted">
+            点击节点或边查看详情。<br>在筛选栏调整条件，图谱会实时更新。<br>点击节点后可用「以该学者为中心」查看上下游谱系。
+          </div>
+        </aside>
       </div>
     </section>
 
-    <section class="graph-panel">
-      <div class="graph-toolbar">
-        <button id="expand-up" class="btn btn-small" type="button">↑ 向上展开一代</button>
-        <button id="expand-down" class="btn btn-small" type="button">↓ 向下展开一代</button>
-        <button id="reset-view" class="btn btn-small" type="button">重置视图</button>
-        <span id="graph-info" class="muted"></span>
+    <!-- ========== 录入页 ========== -->
+    <section id="page-entry" class="page">
+      <div class="entry-wrap">
+        <div class="card entry-col">
+          <h2>① 输入两位学者的主页 URL</h2>
+          <p class="muted">预览身份后确认方向。关系方向不会自动推断；抓取失败可手动填写。</p>
+
+          <label for="mentor-url">导师主页 URL</label>
+          <div class="input-group">
+            <input id="mentor-url" type="url" placeholder="https://…" autocomplete="off">
+            <button id="preview-mentor" class="btn" type="button">预览</button>
+          </div>
+          <div id="mentor-card" class="identity-card" hidden></div>
+
+          <label for="student-url">学生主页 URL</label>
+          <div class="input-group">
+            <input id="student-url" type="url" placeholder="https://…" autocomplete="off">
+            <button id="preview-student" class="btn" type="button">预览</button>
+          </div>
+          <div id="student-card" class="identity-card" hidden></div>
+        </div>
+
+        <div class="card entry-col">
+          <h2>② 确认关系信息</h2>
+          <div class="form-grid">
+            <label>关系类型
+              <select id="relationship-type">
+                <option value="phd" selected>博士导师</option>
+                <option value="master">硕士导师</option>
+                <option value="postdoc">博士后合作导师</option>
+                <option value="informal">非正式指导</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+            <label>状态
+              <select id="rel-status">
+                <option value="verified" selected>已确认</option>
+                <option value="draft">草稿</option>
+                <option value="rejected">已拒绝</option>
+              </select>
+            </label>
+            <label>可信度
+              <select id="confidence">
+                <option value="confirmed" selected>confirmed 已确认</option>
+                <option value="probable">probable 很可能</option>
+                <option value="uncertain">uncertain 不确定</option>
+              </select>
+            </label>
+            <label>入学年份 <input id="start-year" type="number" min="1900" max="2100" placeholder="如 2020"></label>
+            <label>毕业年份 <input id="end-year" type="number" min="1900" max="2100" placeholder="如 2025"></label>
+            <label>机构 <input id="rel-institution" type="text" placeholder="就读/指导所在机构"></label>
+            <label>学生毕业去向 <input id="student-placement" type="text" placeholder="如：毕业后任 XX 大学助理教授"></label>
+            <label>证据 URL <input id="evidence-url" type="url" placeholder="默认使用学生主页 URL"></label>
+            <label>证据说明 <input id="evidence-text" type="text" placeholder="如：主页列出 PhD advisor"></label>
+            <label>私有备注 <input id="notes-private" type="text" placeholder="仅保存在本地，不导出"></label>
+            <label class="checkbox-row"><input id="public-flag" type="checkbox"> 公开（允许导出到公开站点）</label>
+          </div>
+
+          <p id="confirmation-sentence" class="sentence" hidden>
+            学生 <strong id="sentence-student"></strong> 是导师 <strong id="sentence-mentor"></strong> 的学生
+          </p>
+          <button id="confirm-btn" class="btn btn-primary" type="button" disabled>确认并加入图谱</button>
+          <p id="entry-status" class="status"></p>
+        </div>
       </div>
-      <div id="cy"></div>
     </section>
 
-    <aside class="detail-panel card">
-      <h2 id="detail-title">详情</h2>
-      <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>说明：红色为导师方向节点，蓝色为学生方向节点，黄色为当前中心学者；箭头由导师指向学生。</div>
-    </aside>
-  </main>
+    <!-- ========== 学者库页 ========== -->
+    <section id="page-scholars" class="page">
+      <div class="list-layout">
+        <div class="list-main">
+          <div class="filterbar">
+            <input id="s-search" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
+            <select id="s-institution" title="机构"><option value="">全部机构</option></select>
+            <select id="s-title" title="职称"><option value="">全部职称</option></select>
+            <select id="s-start-year" title="入学年份（学生身份）"><option value="">入学年份不限</option></select>
+            <select id="s-end-year" title="毕业年份（学生身份）"><option value="">毕业年份不限</option></select>
+            <button id="s-clear" class="btn btn-small" type="button">清除筛选</button>
+          </div>
+          <ul id="person-list" class="list"></ul>
+        </div>
+        <aside class="detail-panel">
+          <h2 id="scholar-detail-title">学者详情</h2>
+          <div id="scholar-detail-content" class="muted">点击左侧学者查看详情，可编辑职称、机构、编委会任职、荣誉等。</div>
+        </aside>
+      </div>
+    </section>
 
-  <script src="{{ url_for('static', filename='vendor/cytoscape.min.js') }}"></script>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <!-- ========== 关系库页 ========== -->
+    <section id="page-relationships" class="page">
+      <div class="list-layout">
+        <div class="list-main">
+          <div class="filterbar">
+            <input id="r-q" type="search" placeholder="搜索导师 / 学生姓名…" autocomplete="off">
+            <select id="r-status" title="状态"><option value="">全部状态</option></select>
+            <select id="r-type" title="关系类型"><option value="">全部关系类型</option></select>
+            <button id="r-clear" class="btn btn-small" type="button">清除筛选</button>
+          </div>
+          <ul id="relationship-list" class="list"></ul>
+        </div>
+        <aside class="detail-panel">
+          <h2 id="relationship-detail-title">关系详情</h2>
+          <div id="relationship-detail-content" class="muted">点击左侧关系查看详情，可编辑状态、年份、毕业去向、证据等。</div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ========== 导出页 ========== -->
+    <section id="page-export" class="page">
+      <div class="card export-card">
+        <h2>公开数据导出</h2>
+        <p class="muted">只导出同时满足以下条件的数据：学者「公开」；关系「公开 + 已确认」且两端学者均公开。采用白名单字段，私有备注、草稿、拒绝记录不会出现在 JSON 中。</p>
+        <button id="export-btn" class="btn btn-primary" type="button">导出公开数据</button>
+        <p id="export-status" class="status"></p>
+        <h3>导出后的发布步骤</h3>
+        <ol class="steps">
+          <li>检查 <code>public/data/</code> 下生成的 <code>people.json</code>、<code>relationships.json</code>、<code>manifest.json</code>。</li>
+          <li>本地预览：<code>python -m http.server 4173 --directory public</code> 后打开 <code>http://127.0.0.1:4173/</code>。</li>
+          <li>人工检查确认后，将 <code>public/data/</code> 提交到仓库，由 GitHub Pages 发布。</li>
+        </ol>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/cytoscape.min.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

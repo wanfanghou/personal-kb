@@ -6,6 +6,8 @@ from app.repositories import (
     find_persons,
     get_filter_options,
     get_lineage,
+    get_network,
+    list_mentorships,
     normalize_homepage_url,
     update_mentorship,
     update_person,
@@ -208,7 +210,8 @@ def test_filter_persons_by_enrollment_and_graduation_year(app):
 def test_get_filter_options_lists_distinct_values(app):
     with app.app_context():
         mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m",
-                                           "institution": "NUS", "title": "Professor"})
+                                           "institution": "NUS", "title": "Professor",
+                                           "honors": ["国家杰青"]})
         student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s",
                                             "institution": "NUS"})
         create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "phd",
@@ -216,5 +219,44 @@ def test_get_filter_options_lists_distinct_values(app):
         options = get_filter_options()
     assert options["institutions"] == ["NUS"]
     assert options["titles"] == ["Professor"]
+    assert options["honors"] == ["国家杰青"]
     assert options["start_years"] == [2020]
     assert options["end_years"] == [2025]
+    assert "phd" in options["relationship_types"]
+
+
+def test_get_network_filters_nodes_and_edges(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m",
+                                           "institution": "NUS", "title": "Professor"})
+        student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s",
+                                            "institution": "NUS", "title": "PhD Student"})
+        outsider, _ = find_or_create_person({"name": "O", "homepage_url": "https://example.edu/o",
+                                             "institution": "SMU"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "phd",
+                           "evidence_url": "https://example.edu/s", "start_year": 2020, "end_year": 2024})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": outsider["id"], "relationship_type": "master",
+                           "evidence_url": "https://example.edu/o", "start_year": 2021})
+
+        network = get_network({"institution": "NUS", "relationship_type": "phd"})
+    names = {n["name"] for n in network["nodes"]}
+    assert names == {"M", "S"}
+    assert len(network["edges"]) == 1
+    assert network["edges"][0]["relationship_type"] == "phd"
+
+
+def test_list_mentorships_supports_status_filter(app):
+    with app.app_context():
+        mentor, _ = find_or_create_person({"name": "M", "homepage_url": "https://example.edu/m"})
+        student, _ = find_or_create_person({"name": "S", "homepage_url": "https://example.edu/s"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "phd",
+                           "evidence_url": "https://example.edu/s", "status": "verified"})
+        create_mentorship({"mentor_id": mentor["id"], "student_id": student["id"], "relationship_type": "master",
+                           "evidence_url": "https://example.edu/s", "status": "draft"})
+        verified = list_mentorships({"status": "verified"})
+        drafts = list_mentorships({"status": "draft"})
+        by_name = list_mentorships({"q": "S"})
+    assert len(verified) == 1
+    assert verified[0]["student_name"] == "S"
+    assert len(drafts) == 1
+    assert len(by_name) == 2

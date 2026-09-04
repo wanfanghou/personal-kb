@@ -69,6 +69,16 @@ def filter_options():
     return jsonify(repositories.get_filter_options())
 
 
+@bp.get("/network")
+def network():
+    filters = {
+        key: request.args.get(key)
+        for key in ("q", "institution", "title", "honor", "public",
+                    "relationship_type", "start_year", "end_year")
+    }
+    return jsonify(repositories.get_network(filters))
+
+
 @bp.get("/persons/<person_id>")
 def get_person(person_id):
     person = repositories.get_person(person_id)
@@ -103,12 +113,22 @@ def get_lineage(person_id):
     return jsonify(result)
 
 
+@bp.get("/mentorships")
+def list_mentorships():
+    filters = {
+        "q": request.args.get("q"),
+        "status": request.args.get("status"),
+        "relationship_type": request.args.get("relationship_type"),
+    }
+    return jsonify({"mentorships": repositories.list_mentorships(filters)})
+
+
 @bp.post("/mentorships")
 def create_mentorship():
     try:
         mentorship = services.create_mentorship_service(_json_payload())
     except services.DuplicateError as error:
-        return jsonify({"error": str(error)}), 409
+        return jsonify({"error": str(error), "existing": error.existing}), 409
     except services.NotFoundError as error:
         return jsonify({"error": str(error)}), 404
     except services.ValidationError as error:
