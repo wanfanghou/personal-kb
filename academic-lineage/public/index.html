@@ -8,106 +8,154 @@
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
     <div class="brand">
       <div class="brand-mark">谱</div>
       <div>
         <strong>学术谱系</strong>
-        <span>ACADEMIC LINEAGE · PUBLIC</span>
+        <span>ACADEMIC LINEAGE</span>
       </div>
     </div>
-    <div class="topbar-actions">
-      <span id="manifest-info" class="stats-chip"></span>
-      <button id="contribute-btn" class="btn btn-primary" type="button">投稿关系</button>
-    </div>
-  </header>
 
-  <main class="layout">
-    <section class="left-col">
-      <div class="card">
-        <h2>搜索学者</h2>
-        <input id="search-input" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
-        <ul id="search-results" class="list"></ul>
+    <nav class="nav">
+      <div class="nav-label">图谱 NETWORK</div>
+      <button class="nav-item active" data-page="graph" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="5" cy="5" r="2.2"/><circle cx="19" cy="5" r="2.2"/><circle cx="12" cy="19" r="2.2"/><path d="M6.7 6.5l4.6 10M17.3 6.5l-4.6 10"/></svg>
+        <span>学术谱系总览</span>
+      </button>
+
+      <div class="nav-label">数据 DATA</div>
+      <button class="nav-item" data-page="scholars" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M3.5 20c.8-3.6 3-5.4 5.5-5.4s4.7 1.8 5.5 5.4"/><circle cx="17" cy="9" r="2.6"/><path d="M15.6 14.8c2.8-.3 4.7 1.5 5.4 5.2"/></svg>
+        <span>学者库</span>
+      </button>
+
+      <div class="nav-label">协作 COLLAB</div>
+      <button class="nav-item" data-page="contribute" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        <span>投稿关系</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot"><span class="live-dot"></span>数据由人工维护，关系以证据链接为准</div>
+  </aside>
+
+  <!-- ============ 主区域 ============ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="header-context">
+        <span>ACADEMIC LINEAGE</span>
+        <strong id="page-title">学术谱系总览</strong>
       </div>
-      <div class="card grow">
-        <h2>学者列表</h2>
-        <ul id="person-list" class="list"></ul>
+      <span id="pub-stats" class="stats-chip"></span>
+    </header>
+
+    <!-- ========== 图谱页 ========== -->
+    <section id="page-graph" class="page active">
+      <div class="graph-layout">
+        <div class="graph-main">
+          <div class="filterbar">
+            <select id="g-institution" title="机构"><option value="">全部机构</option></select>
+            <select id="g-title" title="职称"><option value="">全部职称</option></select>
+            <select id="g-honor" title="荣誉/人才称号"><option value="">全部荣誉</option></select>
+            <select id="g-type" title="关系类型"><option value="">全部关系类型</option></select>
+            <button id="g-clear" class="btn btn-small" type="button">清除筛选</button>
+          </div>
+          <div class="graph-toolbar">
+            <button id="back-overview" class="btn btn-small" type="button" hidden>← 回到总览</button>
+            <button id="expand-up" class="btn btn-small" type="button">↑ 向上展开一代</button>
+            <button id="expand-down" class="btn btn-small" type="button">↓ 向下展开一代</button>
+            <button id="reset-view" class="btn btn-small" type="button">重置视图</button>
+            <span id="graph-info" class="muted"></span>
+          </div>
+          <div id="cy"></div>
+        </div>
+        <aside class="detail-panel">
+          <h2 id="graph-detail-title">详情</h2>
+          <div id="graph-detail-content" class="muted">
+            点击节点或边查看详情。<br>在筛选栏调整条件，图谱会实时更新。<br>点击节点后可用「以该学者为中心」查看上下游谱系。
+          </div>
+        </aside>
       </div>
-      <p class="muted disclaimer"><span class="live-dot"></span>数据由人工维护，关系以证据链接为准。</p>
     </section>
 
-    <section class="graph-panel">
-      <div class="graph-toolbar">
-        <button id="expand-up" class="btn btn-small" type="button">↑ 向上展开一代</button>
-        <button id="expand-down" class="btn btn-small" type="button">↓ 向下展开一代</button>
-        <button id="reset-view" class="btn btn-small" type="button">重置视图</button>
-        <span id="graph-info" class="muted"></span>
+    <!-- ========== 学者库页 ========== -->
+    <section id="page-scholars" class="page">
+      <div class="list-layout">
+        <div class="list-main">
+          <div class="filterbar">
+            <input id="s-search" type="search" placeholder="姓名 / 英文名 / 机构…" autocomplete="off">
+            <select id="s-institution" title="机构"><option value="">全部机构</option></select>
+            <select id="s-title" title="职称"><option value="">全部职称</option></select>
+            <button id="s-clear" class="btn btn-small" type="button">清除筛选</button>
+          </div>
+          <ul id="person-list" class="list"></ul>
+        </div>
+        <aside class="detail-panel">
+          <h2 id="scholar-detail-title">学者详情</h2>
+          <div id="scholar-detail-content" class="muted">点击左侧学者查看详情。</div>
+        </aside>
       </div>
-      <div id="cy"></div>
     </section>
 
-    <aside class="detail-panel">
-      <h2 id="detail-title">详情</h2>
-      <div id="detail-content" class="muted">点击图谱中的节点或边查看详情。<br>箭头由导师指向学生；金色为当前中心学者。</div>
-    </aside>
-  </main>
+    <!-- ========== 投稿页 ========== -->
+    <section id="page-contribute" class="page">
+      <div class="entry-wrap">
+        <div class="card entry-col">
+          <h2>① 填写师生关系信息</h2>
+          <p class="muted">填写你掌握的师生关系信息。生成投稿内容后，复制 JSON 发送给图谱管理员审核（微信 / 邮件等）。审核通过后会导入公开图谱。</p>
+          <h3 class="group-title">导师</h3>
+          <label>姓名 <input id="c-mentor-name" type="text"></label>
+          <label>主页 URL <input id="c-mentor-url" type="url" placeholder="https://…"></label>
+          <label>职称 <input id="c-mentor-title" type="text" placeholder="如 Professor"></label>
+          <h3 class="group-title">学生</h3>
+          <label>姓名 <input id="c-student-name" type="text"></label>
+          <label>主页 URL <input id="c-student-url" type="url" placeholder="https://…"></label>
+          <label>当前职称 <input id="c-student-title" type="text" placeholder="如 Assistant Professor"></label>
+        </div>
+        <div class="card entry-col">
+          <h2>② 生成投稿内容</h2>
+          <div class="form-grid">
+            <label>关系类型
+              <select id="c-type">
+                <option value="phd" selected>博士导师</option>
+                <option value="master">硕士导师</option>
+                <option value="postdoc">博士后合作导师</option>
+                <option value="informal">非正式指导</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+            <label>可信度
+              <select id="c-confidence">
+                <option value="confirmed" selected>confirmed 已确认</option>
+                <option value="probable">probable 很可能</option>
+                <option value="uncertain">uncertain 不确定</option>
+              </select>
+            </label>
+            <label>入学年份 <input id="c-start" type="number" min="1900" max="2100"></label>
+            <label>毕业年份 <input id="c-end" type="number" min="1900" max="2100"></label>
+            <label>机构 <input id="c-institution" type="text"></label>
+            <label>证据 URL <input id="c-evidence" type="url" placeholder="默认使用学生主页 URL"></label>
+            <label>证据说明 <input id="c-evidence-text" type="text" placeholder="如：主页列出 PhD advisor"></label>
+          </div>
+          <label>给管理员的留言 <input id="c-note" type="text"></label>
+          <div class="detail-actions">
+            <button id="c-generate" class="btn btn-primary" type="button">生成投稿内容</button>
+          </div>
+          <label>投稿内容（复制后发给管理员）<textarea id="c-output" rows="10" readonly></textarea></label>
+          <div class="detail-actions">
+            <button id="c-copy" class="btn" type="button" disabled>复制投稿内容</button>
+          </div>
+          <p id="c-status" class="status"></p>
+        </div>
+      </div>
+    </section>
+  </div>
 </div>
 
-  <!-- ============ 投稿弹窗 ============ -->
-  <div id="contribute-modal" class="modal" hidden>
-    <div class="modal-card">
-      <div class="modal-head">
-        <h2>投稿关系</h2>
-        <button id="contribute-close" class="btn btn-small" type="button">关闭</button>
-      </div>
-      <p class="muted">填写你掌握的师生关系信息，点「生成投稿内容」后复制 JSON，发给图谱管理员审核（微信 / 邮件等）。审核通过后会导入公开图谱。</p>
-      <div class="modal-body">
-        <h3>导师</h3>
-        <label>姓名 <input id="c-mentor-name" type="text"></label>
-        <label>主页 URL <input id="c-mentor-url" type="url" placeholder="https://…"></label>
-        <label>职称 <input id="c-mentor-title" type="text" placeholder="如 Professor"></label>
-        <h3>学生</h3>
-        <label>姓名 <input id="c-student-name" type="text"></label>
-        <label>主页 URL <input id="c-student-url" type="url" placeholder="https://…"></label>
-        <label>当前职称 <input id="c-student-title" type="text" placeholder="如 Assistant Professor"></label>
-        <h3>关系</h3>
-        <div class="form-grid">
-          <label>关系类型
-            <select id="c-type">
-              <option value="phd" selected>博士导师</option>
-              <option value="master">硕士导师</option>
-              <option value="postdoc">博士后合作导师</option>
-              <option value="informal">非正式指导</option>
-              <option value="other">其他</option>
-            </select>
-          </label>
-          <label>可信度
-            <select id="c-confidence">
-              <option value="confirmed" selected>confirmed 已确认</option>
-              <option value="probable">probable 很可能</option>
-              <option value="uncertain">uncertain 不确定</option>
-            </select>
-          </label>
-          <label>入学年份 <input id="c-start" type="number" min="1900" max="2100"></label>
-          <label>毕业年份 <input id="c-end" type="number" min="1900" max="2100"></label>
-          <label>机构 <input id="c-institution" type="text"></label>
-          <label>证据 URL <input id="c-evidence" type="url" placeholder="默认使用学生主页 URL"></label>
-          <label>证据说明 <input id="c-evidence-text" type="text" placeholder="如：主页列出 PhD advisor"></label>
-        </div>
-        <label>给管理员的留言 <input id="c-note" type="text"></label>
-        <div class="detail-actions">
-          <button id="c-generate" class="btn btn-primary" type="button">生成投稿内容</button>
-        </div>
-        <label>投稿内容（复制后发给管理员）<textarea id="c-output" rows="8" readonly></textarea></label>
-        <div class="detail-actions">
-          <button id="c-copy" class="btn" type="button" disabled>复制投稿内容</button>
-        </div>
-        <p id="c-status" class="muted"></p>
-      </div>
-    </div>
-  </div>
-
-  <script src="vendor/cytoscape.min.js"></script>
-  <script src="app.js"></script>
+<script src="vendor/cytoscape.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

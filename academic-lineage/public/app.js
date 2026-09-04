@@ -1,14 +1,16 @@
 'use strict';
 
-/* 公开静态图谱：只读 data/*.json，无后端 */
+/* 公开静态图谱：只读 data/*.json，无后端。结构与本地管理页保持一致。 */
 
 const state = {
   people: [],
   relationships: [],
   byId: new Map(),
+  graphMode: 'overview', // 'overview' | 'lineage'
   centerId: null,
   up: 3,
   down: 2,
+  selectedId: null,
 };
 
 const REL_TYPE_ZH = {
@@ -18,6 +20,11 @@ const REL_TYPE_ZH = {
   informal: '非正式指导',
   other: '其他',
 };
+
+const PAGE_TITLES = { graph: '学术谱系总览', scholars: '学者库', contribute: '投稿关系' };
+
+const GRAPH_DETAIL_HINT = '点击节点或边查看详情。<br>在筛选栏调整条件，图谱会实时更新。<br>点击节点后可用「以该学者为中心」查看上下游谱系。';
+const SCHOLAR_DETAIL_HINT = '点击左侧学者查看详情。';
 
 const $ = (id) => document.getElementById(id);
 
@@ -41,6 +48,25 @@ function showErrorBanner(message) {
   document.body.prepend(banner);
 }
 
+/* ================= 页面切换 ================= */
+
+function switchPage(page) {
+  document.querySelectorAll('.page').forEach((el) => {
+    el.classList.toggle('active', el.id === `page-${page}`);
+  });
+  document.querySelectorAll('.nav-item').forEach((el) => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  $('page-title').textContent = PAGE_TITLES[page] || '';
+  if (page === 'graph') {
+    if (state.graphMode === 'overview') loadNetwork();
+    else if (state.centerId) loadLineage(state.centerId, state.up, state.down);
+  }
+  if (page === 'scholars') refreshScholarList();
+}
+
+/* ================= 数据加载 ================= */
+
 async function loadData() {
   try {
     const [people, relationships, manifest] = await Promise.all([
@@ -58,69 +84,55 @@ async function loadData() {
     state.relationships = relationships;
     state.byId = new Map(people.map((p) => [p.id, p]));
     if (manifest) {
-      $('manifest-info').textContent =
+      $('pub-stats').textContent =
         `更新于 ${manifest.generated_at.replace('T', ' ').slice(0, 16)} UTC · ` +
         `${manifest.people_count} 位学者 / ${manifest.relationship_count} 条关系`;
     }
-    renderPersonList();
+    populateFilterOptions();
+    loadNetwork();
+    refreshScholarList();
   } catch (error) {
     showErrorBanner(error.message);
   }
 }
 
-function renderPersonList() {
-  const list = $('person-list');
-  list.innerHTML = '';
-  for (const person of state.people) {
-    const item = document.createElement('li');
-    item.className = 'result-item';
-    item.innerHTML = `
-      <span class="result-name">${escapeHtml(person.name)}</span>
-      ${person.institution ? `<span class="result-meta">${escapeHtml(person.institution)}</span>` : ''}`;
-    item.addEventListener('click', () => selectPerson(person.id));
-    list.appendChild(item);
+function fillSelect(id, values, placeholder, labels = null) {
+  const select = $(id);
+  const current = select.value;
+  select.innerHTML = '';
+  const first = document.createElement('option');
+  first.value = '';
+  first.textContent = placeholder;
+  select.appendChild(first);
+  for (const value of values) {
+    const option = document.createElement('option');
+    option.value = String(value);
+    option.textContent = labels && labels[value] ? labels[value] : String(value);
+    select.appendChild(option);
   }
-  if (!state.people.length) {
-    list.innerHTML = '<li class="muted">暂无公开数据（本地管理页导出后生成）</li>';
-  }
-}
-
-/* ---------- 搜索 ---------- */
-
-let searchTimer = null;
-
-function runSearch() {
-  const q = $('search-input').value.trim().toLowerCase();
-  const list = $('search-results');
-  if (!q) { list.innerHTML = ''; return; }
-  const results = state.people.filter((person) => {
-    const haystack = [
-      person.name,
-      person.name_en,
-      person.institution,
-      person.field,
-      ...(person.aliases || []),
-    ].filter(Boolean).join(' ').toLowerCase();
-    return haystack.includes(q);
-  }).slice(0, 50);
-
-  list.innerHTML = '';
-  if (!results.length) {
-    list.innerHTML = '<li class="muted">没有匹配的学者</li>';
-    return;
-  }
-  for (const person of results) {
-    const item = document.createElement('li');
-    item.className = 'result-item';
-    item.innerHTML = `
-      <span class="result-name">${escapeHtml(person.name)}</span>
-      ${person.institution ? `<span class="result-meta">${escapeHtml(person.institution)}</span>` : ''}`;
-    item.addEventListener('click', () => selectPerson(person.id));
-    list.appendChild(item);
+  if ([...select.options].some((option) => option.value === current)) {
+    select.value = current;
   }
 }
 
-/* ---------- 图谱 ---------- */
+function distinct(values) {
+  return [...new Set(values.filter(Boolean))].sort();
+}
+
+function populateFilterOptions() {
+  const institutions = distinct(state.people.map((p) => p.institution));
+  const titles = distinct(state.people.map((p) => p.title));
+  const honors = distinct(state.people.flatMap((p) => p.honors || []));
+  const types = distinct(state.relationships.map((r) => r.relationship_type));
+  fillSelect('g-institution', institutions, '全部机构');
+  fillSelect('g-title', titles, '全部职称');
+  fillSelect('g-honor', honors, '全部荣誉');
+  fillSelect('g-type', types, '全部关系类型', REL_TYPE_ZH);
+  fillSelect('s-institution', institutions, '全部机构');
+  fillSelect('s-title', titles, '全部职称');
+}
+
+/* ================= 图谱页 ================= */
 
 let cy = null;
 
@@ -137,61 +149,134 @@ function ensureCy() {
           'text-valign': 'center',
           'text-halign': 'center',
           'font-size': 11,
-          color: '#1f2937',
-          'background-color': '#93c5fd',
-          width: 36,
-          height: 36,
+          color: '#2b2623',
+          'background-color': '#a9bcd4',
+          width: 38,
+          height: 38,
           'border-width': 1.5,
-          'border-color': '#2563eb',
+          'border-color': '#6f89ab',
           'text-wrap': 'wrap',
-          'text-max-width': 90,
+          'text-max-width': 96,
         },
       },
       {
         selector: 'node[type = "mentor"]',
-        style: { 'background-color': '#fca5a5', 'border-color': '#dc2626' },
+        style: { 'background-color': '#d8a09b', 'border-color': '#b3362c' },
       },
       {
         selector: 'node.center',
         style: {
-          width: 50,
-          height: 50,
-          'background-color': '#fde047',
-          'border-color': '#ca8a04',
+          width: 52,
+          height: 52,
+          'background-color': '#e6b93c',
+          'border-color': '#b98a12',
           'border-width': 3,
           'font-size': 12,
         },
       },
       {
+        selector: 'node.selected',
+        style: {
+          'border-width': 3,
+          'border-color': '#b3362c',
+          width: 48,
+          height: 48,
+        },
+      },
+      {
         selector: 'edge',
         style: {
-          width: 2,
-          'line-color': '#9ca3af',
-          'target-arrow-color': '#6b7280',
+          width: 1.8,
+          'line-color': '#c6bcb4',
+          'target-arrow-color': '#a99c92',
           'target-arrow-shape': 'triangle',
           'curve-style': 'bezier',
-          'arrow-scale': 1.1,
+          'arrow-scale': 1.05,
         },
       },
     ],
     layout: { name: 'preset' },
     wheelSensitivity: 0.25,
   });
-  cy.on('tap', 'node', (event) => showPersonDetails(event.target.data()));
-  cy.on('tap', 'edge', (event) => showRelationshipDetails(event.target.data()));
+  cy.on('tap', 'node', (event) => {
+    const person = event.target.data();
+    if (state.graphMode === 'overview') {
+      state.selectedId = person.id;
+      cy.elements().removeClass('selected');
+      event.target.addClass('selected');
+      renderPersonDetails(person, 'graph');
+    } else {
+      state.selectedId = person.id;
+      loadLineage(person.id, 3, 2);
+    }
+  });
+  cy.on('tap', 'edge', (event) => {
+    const rel = state.relationships.find((r) => r.id === event.target.id());
+    if (rel) renderRelationshipDetails(rel);
+  });
+  window.__cy = cy;
   return cy;
 }
 
-function selectPerson(personId) {
-  state.centerId = personId;
-  state.up = 3;
-  state.down = 2;
-  loadLineage(personId, state.up, state.down);
+function renderGraph(nodes, edges) {
+  const cyGraph = ensureCy();
+  const sourceIds = new Set(edges.map((e) => e.mentor_id));
+  const elements = [
+    ...nodes.map((n) => {
+      const classes = [
+        state.graphMode === 'lineage' && n.id === state.centerId ? 'center' : '',
+        state.graphMode === 'overview' && n.id === state.selectedId ? 'selected' : '',
+      ].join(' ').trim();
+      return {
+        data: { id: n.id, label: n.name, type: sourceIds.has(n.id) ? 'mentor' : 'student', ...n },
+        classes,
+      };
+    }),
+    ...edges.map((e) => ({ data: { id: e.id, source: e.mentor_id, target: e.student_id, ...e } })),
+  ];
+  cyGraph.elements().remove();
+  cyGraph.add(elements);
+  const layout = state.graphMode === 'overview'
+    ? { name: 'cose', padding: 45, animate: false, nodeRepulsion: 9000 }
+    : { name: 'breadthfirst', directed: true, roots: `#${state.centerId}`, padding: 45, spacingFactor: 1.2 };
+  cyGraph.layout(layout).run();
+  cyGraph.fit(undefined, 55);
+}
+
+function graphFilteredData() {
+  const institution = $('g-institution').value;
+  const title = $('g-title').value;
+  const honor = $('g-honor').value;
+  const type = $('g-type').value;
+  const nodes = state.people.filter((p) =>
+    (!institution || p.institution === institution) &&
+    (!title || p.title === title) &&
+    (!honor || (p.honors || []).includes(honor))
+  );
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const edges = state.relationships.filter((r) =>
+    (!type || r.relationship_type === type) &&
+    nodeIds.has(r.mentor_id) && nodeIds.has(r.student_id)
+  );
+  return { nodes, edges };
+}
+
+function loadNetwork() {
+  const { nodes, edges } = graphFilteredData();
+  state.graphMode = 'overview';
+  renderGraph(nodes, edges);
+  $('back-overview').hidden = true;
+  $('graph-info').textContent = `总览：${nodes.length} 个节点 / ${edges.length} 条边 · 点击节点或边查看详情`;
+  if (!state.selectedId || !nodes.some((n) => n.id === state.selectedId)) {
+    state.selectedId = null;
+    $('graph-detail-title').textContent = '详情';
+    $('graph-detail-content').innerHTML = GRAPH_DETAIL_HINT;
+  }
 }
 
 function loadLineage(personId, up, down) {
-  const mentorOf = new Map();   // student_id -> [relationships]
-  const studentsOf = new Map(); // mentor_id -> [relationships]
+  const mentorOf = new Map();
+  const studentsOf = new Map();
   for (const rel of state.relationships) {
     if (!mentorOf.has(rel.student_id)) mentorOf.set(rel.student_id, []);
     mentorOf.get(rel.student_id).push(rel);
@@ -202,7 +287,6 @@ function loadLineage(personId, up, down) {
   const nodeIds = new Set([personId]);
   const edgeIds = new Set();
 
-  // 向上：导师
   let frontier = new Set([personId]);
   for (let i = 0; i < up; i += 1) {
     const next = new Set();
@@ -217,7 +301,6 @@ function loadLineage(personId, up, down) {
     if (!frontier.size) break;
   }
 
-  // 向下：学生
   frontier = new Set([personId]);
   for (let i = 0; i < down; i += 1) {
     const next = new Set();
@@ -234,41 +317,61 @@ function loadLineage(personId, up, down) {
 
   const nodes = [...nodeIds].map((id) => state.byId.get(id)).filter(Boolean);
   const edges = [...edgeIds].map((id) => state.relationships.find((r) => r.id === id)).filter(Boolean);
+  state.graphMode = 'lineage';
+  state.centerId = personId;
+  state.up = up;
+  state.down = down;
+  state.selectedId = personId;
   renderGraph(nodes, edges);
-  $('graph-info').textContent =
-    `中心：${state.byId.get(personId)?.name || personId} · 向上 ${up} 代 · 向下 ${down} 代 · ` +
-    `${nodes.length} 个节点 / ${edges.length} 条边`;
+  $('back-overview').hidden = false;
   const center = state.byId.get(personId);
-  if (center) showPersonDetails(center);
+  $('graph-info').textContent =
+    `以 ${center ? center.name : personId} 为中心 · 向上 ${up} 代 · 向下 ${down} 代 · ` +
+    `${nodes.length} 个节点 / ${edges.length} 条边`;
+  if (center) renderPersonDetails(center, 'graph');
 }
 
-function renderGraph(nodes, edges) {
-  const cyGraph = ensureCy();
-  const sourceIds = new Set(edges.map((e) => e.mentor_id));
-  const elements = [
-    ...nodes.map((n) => ({
-      data: { id: n.id, label: n.name, type: sourceIds.has(n.id) ? 'mentor' : 'student', ...n },
-      classes: n.id === state.centerId ? 'center' : '',
-    })),
-    ...edges.map((e) => ({ data: { id: e.id, source: e.mentor_id, target: e.student_id, ...e } })),
-  ];
-  cyGraph.elements().remove();
-  cyGraph.add(elements);
-  cyGraph.layout({
-    name: 'breadthfirst',
-    directed: true,
-    roots: `#${state.centerId}`,
-    padding: 35,
-    spacingFactor: 1.2,
-  }).run();
-  cyGraph.fit(undefined, 45);
+function centerOnPerson(personId) {
+  switchPage('graph');
+  loadLineage(personId, 3, 2);
 }
 
-/* ---------- 详情 ---------- */
+function expandUp() {
+  if (state.graphMode !== 'lineage' || state.up >= 10 || !state.centerId) return;
+  state.up += 1;
+  loadLineage(state.centerId, state.up, state.down);
+}
 
-function showPersonDetails(person) {
-  $('detail-title').textContent = `学者：${person.name}`;
-  $('detail-content').innerHTML = `
+function expandDown() {
+  if (state.graphMode !== 'lineage' || state.down >= 10 || !state.centerId) return;
+  state.down += 1;
+  loadLineage(state.centerId, state.up, state.down);
+}
+
+/* ================= 详情 ================= */
+
+const DETAIL_IDS = {
+  graph: { title: 'graph-detail-title', content: 'graph-detail-content' },
+  scholar: { title: 'scholar-detail-title', content: 'scholar-detail-content' },
+};
+
+function setDetail(container, title, html) {
+  const ids = DETAIL_IDS[container];
+  $(ids.title).textContent = title;
+  $(ids.content).innerHTML = html;
+}
+
+function renderPersonDetails(person, container) {
+  const actions = `
+    <div class="detail-actions">
+      <button class="btn btn-primary btn-small" data-action="center-person">以该学者为中心</button>
+      ${container === 'graph'
+        ? `<button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
+           <button class="btn btn-small" data-action="expand-down">↓ 向下展开一代</button>
+           <button class="btn btn-small" data-action="reset-view">重置视图</button>`
+        : ''}
+    </div>`;
+  setDetail(container, `学者：${person.name}`, `
     <dl class="detail-list">
       <dt>姓名</dt><dd>${escapeHtml(person.name)}</dd>
       ${person.name_en ? `<dt>英文名</dt><dd>${escapeHtml(person.name_en)}</dd>` : ''}
@@ -283,20 +386,16 @@ function showPersonDetails(person) {
         ? `<dt>别名</dt><dd>${escapeHtml(person.aliases.join('、'))}</dd>` : ''}
       <dt>主页</dt><dd><a href="${escapeHtml(person.homepage_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(person.homepage_url)}</a></dd>
     </dl>
-    <div class="detail-actions">
-      <button class="btn btn-small" data-action="expand-up">↑ 向上展开一代</button>
-      <button class="btn btn-small" data-action="expand-down">↓ 向下展开一代</button>
-      <button class="btn btn-small" data-action="reset-view">重置视图</button>
-    </div>
-  `;
+    ${actions}
+  `);
 }
 
-function showRelationshipDetails(rel) {
+function renderRelationshipDetails(rel) {
   const mentor = state.byId.get(rel.mentor_id);
   const student = state.byId.get(rel.student_id);
   const years = [rel.start_year, rel.end_year].filter(Boolean).join(' – ');
-  $('detail-title').textContent = `关系：${REL_TYPE_ZH[rel.relationship_type] || rel.relationship_type}`;
-  $('detail-content').innerHTML = `
+  $('graph-detail-title').textContent = `关系：${REL_TYPE_ZH[rel.relationship_type] || rel.relationship_type}`;
+  $('graph-detail-content').innerHTML = `
     <dl class="detail-list">
       <dt>导师</dt><dd>${escapeHtml(mentor?.name || rel.mentor_id)}</dd>
       <dt>学生</dt><dd>${escapeHtml(student?.name || rel.student_id)}</dd>
@@ -311,12 +410,54 @@ function showRelationshipDetails(rel) {
   `;
 }
 
-/* ---------- 投稿 ---------- */
+/* ================= 学者库页 ================= */
 
-const REL_TYPE_ZH_PUB = {
-  phd: '博士导师', master: '硕士导师', postdoc: '博士后合作导师',
-  informal: '非正式指导', other: '其他',
-};
+let scholarTimer = null;
+
+function refreshScholarList() {
+  const q = $('s-search').value.trim().toLowerCase();
+  const institution = $('s-institution').value;
+  const title = $('s-title').value;
+  const results = state.people.filter((person) => {
+    const haystack = [
+      person.name,
+      person.name_en,
+      person.institution,
+      person.field,
+      ...(person.aliases || []),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return (!q || haystack.includes(q)) &&
+      (!institution || person.institution === institution) &&
+      (!title || person.title === title);
+  });
+
+  const list = $('person-list');
+  list.innerHTML = '';
+  if (!results.length) {
+    list.innerHTML = state.people.length
+      ? '<li class="muted" style="padding:12px">没有符合条件的学者，试试调整筛选</li>'
+      : '<li class="muted" style="padding:12px">暂无公开数据（本地管理页导出后生成）</li>';
+    return;
+  }
+  for (const person of results) {
+    const item = document.createElement('li');
+    item.className = 'list-item';
+    item.innerHTML = `
+      <div class="li-main">
+        <div class="li-title">${escapeHtml(person.name)}</div>
+        <div class="li-meta">${escapeHtml([person.title, person.institution].filter(Boolean).join(' · ')) || '—'}</div>
+      </div>
+      ${person.honors && person.honors.length ? `<span class="badge badge-ok">${escapeHtml(person.honors[0])}</span>` : ''}`;
+    item.addEventListener('click', () => {
+      document.querySelectorAll('#person-list .list-item').forEach((el) => el.classList.remove('selected'));
+      item.classList.add('selected');
+      renderPersonDetails(person, 'scholar');
+    });
+    list.appendChild(item);
+  }
+}
+
+/* ================= 投稿页 ================= */
 
 function generateContribution() {
   const required = [
@@ -328,6 +469,7 @@ function generateContribution() {
   for (const [id, label] of required) {
     if (!$(id).value.trim()) {
       $('c-status').textContent = `请填写${label}`;
+      $('c-status').className = 'status error';
       return;
     }
   }
@@ -360,69 +502,98 @@ function generateContribution() {
   $('c-output').value = JSON.stringify(envelope, null, 2);
   $('c-copy').disabled = false;
   $('c-status').textContent = '已生成。复制后发送给管理员（微信 / 邮件等）。';
+  $('c-status').className = 'status ok';
 }
 
 async function copyContribution() {
   try {
     await navigator.clipboard.writeText($('c-output').value);
     $('c-status').textContent = '已复制到剪贴板，去粘贴发送给管理员吧。';
+    $('c-status').className = 'status ok';
   } catch (error) {
     $('c-output').select();
     $('c-status').textContent = '复制失败，请手动全选复制（已为你选中）。';
+    $('c-status').className = 'status error';
   }
 }
 
-function bindContribution() {
-  const modal = $('contribute-modal');
-  $('contribute-btn').addEventListener('click', () => { modal.hidden = false; });
-  $('contribute-close').addEventListener('click', () => { modal.hidden = true; });
+/* ================= 事件绑定 ================= */
+
+function bindNav() {
+  document.querySelectorAll('.nav-item').forEach((button) => {
+    button.addEventListener('click', () => switchPage(button.dataset.page));
+  });
+}
+
+function bindGraphControls() {
+  ['g-institution', 'g-title', 'g-honor', 'g-type'].forEach((id) => {
+    $(id).addEventListener('change', loadNetwork);
+  });
+  $('g-clear').addEventListener('click', () => {
+    ['g-institution', 'g-title', 'g-honor', 'g-type'].forEach((id) => { $(id).value = ''; });
+    loadNetwork();
+  });
+  $('back-overview').addEventListener('click', () => {
+    state.selectedId = state.centerId;
+    loadNetwork();
+  });
+  $('expand-up').addEventListener('click', expandUp);
+  $('expand-down').addEventListener('click', expandDown);
+  $('reset-view').addEventListener('click', () => ensureCy().fit(undefined, 55));
+}
+
+function bindScholarControls() {
+  $('s-search').addEventListener('input', () => {
+    clearTimeout(scholarTimer);
+    scholarTimer = setTimeout(refreshScholarList, 250);
+  });
+  $('s-institution').addEventListener('change', refreshScholarList);
+  $('s-title').addEventListener('change', refreshScholarList);
+  $('s-clear').addEventListener('click', () => {
+    $('s-search').value = '';
+    $('s-institution').value = '';
+    $('s-title').value = '';
+    refreshScholarList();
+  });
+}
+
+function bindContributeControls() {
   $('c-generate').addEventListener('click', generateContribution);
   $('c-copy').addEventListener('click', copyContribution);
 }
 
-/* ---------- 初始化 ---------- */
-
-function initApp() {
-  $('search-input').addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(runSearch, 250);
-  });
-  $('expand-up').addEventListener('click', () => {
-    if (state.up >= 10 || !state.centerId) return;
-    state.up += 1;
-    loadLineage(state.centerId, state.up, state.down);
-  });
-  $('expand-down').addEventListener('click', () => {
-    if (state.down >= 10 || !state.centerId) return;
-    state.down += 1;
-    loadLineage(state.centerId, state.up, state.down);
-  });
-  $('reset-view').addEventListener('click', () => ensureCy().fit(undefined, 45));
-  $('detail-content').addEventListener('click', (event) => {
+function bindDetailActions() {
+  document.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-action]');
     if (!button) return;
     const action = button.dataset.action;
-    if (action === 'expand-up') { state.up = Math.min(10, state.up + 1); loadLineage(state.centerId, state.up, state.down); }
-    if (action === 'expand-down') { state.down = Math.min(10, state.down + 1); loadLineage(state.centerId, state.up, state.down); }
-    if (action === 'reset-view') ensureCy().fit(undefined, 45);
+    if (action === 'center-person') centerOnPerson(state.selectedId || state.centerId);
+    if (action === 'expand-up') expandUp();
+    if (action === 'expand-down') expandDown();
+    if (action === 'reset-view') ensureCy().fit(undefined, 55);
   });
 }
 
-function start() {
-  initApp();
-  bindContribution();
+/* ================= 初始化 ================= */
+
+function initApp() {
+  bindNav();
+  bindGraphControls();
+  bindScholarControls();
+  bindContributeControls();
+  bindDetailActions();
   loadData();
-  if (typeof cytoscape !== 'undefined') ensureCy();
 }
 
 if (typeof cytoscape === 'undefined') {
   const script = document.createElement('script');
   script.src = 'https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js';
-  script.onload = () => { if (typeof cytoscape !== 'undefined') start(); };
+  script.onload = () => { if (typeof cytoscape !== 'undefined') initApp(); };
   script.onerror = () => {
     $('cy').innerHTML = '<p class="muted" style="padding:20px">图谱库加载失败，请检查网络连接。</p>';
   };
   document.head.appendChild(script);
 } else {
-  start();
+  initApp();
 }
+
